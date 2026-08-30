@@ -1,3 +1,11 @@
-# Direct Python dependencies used by standalone YTEAM and optional browser mode.
+# Direct Python dependencies used by standalone YTEAM on Windows, macOS, and Linux.
 PyYAML==6.0.2
+fastapi==0.115.14
+uvicorn==0.34.3
+pydantic==2.11.7
 camoufox==0.4.11
+playwright==1.52.0
+psutil==7.0.0
+rich==14.0.0
+requests==2.32.4
+mcp==1.10.1

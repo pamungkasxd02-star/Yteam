@@ -25,10 +25,7 @@ never shipping "here's how to attack anyone" tooling.
 ```
 src/
   core/          # shared scope-safe utilities
-  bot_bypass/    # anti-bot gate classification (authorized testing)
-  decrypt/       # encoded/signed payload analysis (authorized research)
-  pentest_qa/    # pentest + QA checklist and matrix
-  server_guard/  # hardening/exposure checks (read-only)
+  local_solver/  # allowlisted anti-bot/browser observation (authorized testing)
 tests/           # unit tests
 scripts/         # Yteam orchestration engines
 docs/            # guides

@@ -27,10 +27,10 @@ separate UI application.
 `python scripts/install_yteam.py` creates a local runtime tree:
 
 - Native YTEAM TUI under `scripts/yteam_tui.py`;
-- Native policy, session, event, model, skill, and assessment components;
+- Native policy, session, event, model, skill, LocalSolver, MCP, and assessment components;
 - YTEAM virtual environment at `runtime/.venv`;
-- PyYAML and optional Camoufox dependencies from `requirements.txt`;
-- the user-local `yteam` launcher.
+- every Python dependency pinned in `requirements.txt`;
+- the user-local `yteam`, `yteam-control`, `yteam-worker`, `localsolver`, and `yteam-mcp` launchers.
 
 No vendor checkout is downloaded. No global OpenCode, Bun, or shell tool is
 modified. Generated runtime and engagement artifacts remain local.
@@ -39,17 +39,23 @@ modified. Generated runtime and engagement artifacts remain local.
 
 | Component | Purpose | If missing |
 |---|---|---|
-| Camoufox | Isolated browser observation for anti-bot classification | Native HTTP detection |
-| Chrome/Chromium/Edge | Browser proof and visual QA | HTTP/text workflows |
 | Nuclei, FFUF, Arjun, Dalfox, SQLMap | Targeted validation helpers | Manual safe validation |
 | Go-based helpers | Optional external tooling | Native/Python fallbacks |
 
-Camoufox is installed from the single root requirements file. Skip only its
-browser binary download with:
+## LocalSolver system dependencies
 
-```text
-python scripts/install_yteam.py --skip-browser-download
+Python dependencies are installed automatically from `requirements.txt` on
+Windows, macOS, and Linux. Browser system libraries cannot be represented as
+pip dependencies. Camoufox normally fetches its own browser data. On minimal
+Debian/Ubuntu servers, install the browser libraries once:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y xvfb libasound2t64 libgtk-3-0 libdbus-glib-1-2
 ```
+
+On desktop Windows and macOS no additional package-manager command is normally
+required. Use the native Python installer on all operating systems.
 
 ## Model
 
@@ -94,6 +100,6 @@ python -m unittest discover -s tests -p "test_*.py" -v
 ## Safety
 
 YTEAM is for authorized security testing only. The default mode is scoped,
-read-only, low-rate, and non-destructive. Botterdop/Camoufox detects gates but
-does not bypass WAFs or solve challenges. `/bb` never submits reports
+read-only, low-rate, and non-destructive. The gate detector classifies blocks
+but does not bypass WAFs or solve challenges. `/bb` never submits reports
 automatically.

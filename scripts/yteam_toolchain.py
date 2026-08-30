@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import os
 import shutil
@@ -27,7 +26,7 @@ class Tool:
 
 
 DEFINITIONS = (
-    ("camoufox", "Isolated browser observation adapter for Botterdop", "browser", "fresh context; detection/manual review only"),
+    ("localsolver", "LocalSolver async Camoufox observation service", "browser", "allowlisted target; observation/manual review only"),
     ("subfinder", "Passive subdomain discovery", "recon", "passive-only"),
     ("dnsx", "DNS record and address inventory", "recon", "resolve discovered names only after scope review"),
     ("httpx", "ProjectDiscovery HTTP status/title/technology probing", "probe", "low-rate GET/HEAD"),
@@ -51,8 +50,9 @@ DEFINITIONS = (
 
 
 def locate(name: str) -> tuple[str | None, str]:
-    if name == "camoufox":
-        return ("python package: camoufox", "Python package") if importlib.util.find_spec("camoufox") else (None, "missing-python-package")
+    if name == "localsolver":
+        script = ROOT / "scripts" / "localsolver.py"
+        return (str(script), "YTEAM native") if script.exists() else (None, "missing")
     suffix = ".exe" if os.name == "nt" else ""
     for path in (
         ROOT / "runtime" / "bin" / f"{name}{suffix}",

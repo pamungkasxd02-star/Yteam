@@ -27,10 +27,14 @@ def run() -> dict[str, object]:
     checks.append(check("native-tools", (ROOT / "scripts" / "yteam_native_tools.py").exists(), "scripts/yteam_native_tools.py"))
     checks.append(check("control-plane", (ROOT / "scripts" / "yteam_control.py").exists(), "signed Telegram/Discord/WhatsApp adapter"))
     checks.append(check("durable-worker", (ROOT / "scripts" / "yteam_worker.py").exists(), "checkpointed assessment worker"))
+    checks.append(check("localsolver", (ROOT / "scripts" / "localsolver.py").exists(), "Camoufox task service for authorized browser observation"))
+    checks.append(check("mcp-server", (ROOT / "scripts" / "yteam_mcp.py").exists(), "native stdio MCP tools and skill registry"))
+    checks.append(check("skill-catalog", (ROOT / "skills" / "catalog.json").exists(), "portable first-party security skill metadata catalog"))
+    for package in ("yaml", "fastapi", "uvicorn", "pydantic", "camoufox", "playwright", "psutil", "rich", "requests", "mcp"):
+        present = importlib.util.find_spec(package) is not None
+        checks.append(check(f"python:{package}", present, "installed" if present else "missing; run installer", required=package not in {"camoufox", "playwright"}))
     uv = shutil.which("uv")
     checks.append(check("uv", bool(uv), uv or "not found; installer can bootstrap it", required=False))
-    camoufox = importlib.util.find_spec("camoufox") is not None
-    checks.append(check("camoufox", camoufox, "installed" if camoufox else "not installed; native Botterdop remains available", required=False))
     checks.append(check("config", (ROOT / "YTEAM_SECURITY.md").exists(), "YTEAM_SECURITY.md"))
     checks.append(check("github-ci", (ROOT / ".github" / "workflows" / "ci.yml").exists(), ".github/workflows/ci.yml"))
     model_config = next((path for path in (ROOT / "yteam.local.yaml", ROOT / "runtime" / "yteam-model.yaml", ROOT / "runtime" / "yteam-model.local.yaml") if path.exists()), None)
@@ -38,7 +42,7 @@ def run() -> dict[str, object]:
     usage = shutil.disk_usage(ROOT.anchor or ROOT)
     checks.append(check("disk", usage.free >= 1_000_000_000, f"{usage.free // (1024 ** 3)} GiB free", required=False))
     required_failed = [item["name"] for item in checks if item["required"] and not item["ok"]]
-    return {"schema_version": 2, "product": "YTEAM", "root": str(ROOT), "ready": not required_failed, "required_failures": required_failed, "checks": checks, "next": "Install requirements.txt when optional PyYAML or Camoufox features are needed; the native runtime has no vendored-source requirement."}
+    return {"schema_version": 2, "product": "YTEAM", "root": str(ROOT), "ready": not required_failed, "required_failures": required_failed, "checks": checks, "next": "Install requirements.txt when optional YAML scope parsing is needed; the native runtime has no vendored-source requirement."}
 
 
 def main() -> int:

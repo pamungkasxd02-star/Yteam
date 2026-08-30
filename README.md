@@ -17,7 +17,7 @@ assessment artifacts under `runtime/`.
 ```powershell
 git clone https://github.com/pamungkasxd02-star/Yteam.git Yteam
 cd Yteam
-python scripts\install_yteam.py --skip-browser-download
+python scripts\install_yteam.py
 ```
 
 ### macOS/Linux
@@ -25,12 +25,14 @@ python scripts\install_yteam.py --skip-browser-download
 ```bash
 git clone https://github.com/pamungkasxd02-star/Yteam.git yteam
 cd yteam
-python3 scripts/install_yteam.py --skip-browser-download
+python3 scripts/install_yteam.py
 ```
 
-The installer creates `runtime/.venv`, installs `requirements.txt`, and places
-user-local `yteam`, `yteam-control`, and `yteam-worker` launchers. Omit `--skip-browser-download` if the optional
-Camoufox browser observer is required.
+The installer creates `runtime/.venv`, installs every Python package pinned in
+`requirements.txt`, fetches Camoufox browser data into `runtime/cache/`, and
+installs `yteam`, `yteam-control`, `yteam-worker`, `localsolver`, and
+`yteam-mcp` launchers. Use `--skip-browser-download` only when installing in CI
+or when browser data has already been fetched.
 
 Preview the plan without changing anything:
 
@@ -62,6 +64,7 @@ Commands:
 /doctor                       run local diagnostics
 /bb <authorized-http-target>  run the scoped read-only assessment
 /jobs                         show durable jobs/checkpoints
+/skills                       show full skill/risk/source summary
 /quit                         exit
 ```
 
@@ -148,6 +151,60 @@ remotely. Every accepted or denied command is recorded in the runtime event
 ledger. Never send cookies, API keys, passwords, or customer data through a
 chat adapter.
 
+## LocalSolver
+
+LocalSolver follows the architecture of Boterdrop-Solver—FastAPI, asynchronous
+task queue, Camoufox browser workers, and result polling—but uses the YTEAM name
+and safety contract. It is for allowlisted, authorized browser observation
+during recon. It records response/gate metadata and stores output under
+`runtime/localsolver/`; it does **not** export challenge tokens/cookies, rotate
+proxies/identities, solve CAPTCHAs, or automatically evade WAF policy.
+
+```powershell
+$env:LOCALSOLVER_TARGET_ALLOWLIST = "https://authorized-target.example"
+$env:LOCALSOLVER_API_KEY = "optional-key-required-for-non-local-binding"
+localsolver --host 127.0.0.1 --port 8001 --workers 2
+```
+
+API:
+
+```text
+GET  /health
+POST /observe   {"url":"https://authorized-target.example","headless":true}
+GET  /result?id=<task_id>
+GET  /tasks
+```
+
+`/observe` rejects targets not present in `LOCALSOLVER_TARGET_ALLOWLIST`.
+
+## First-party skills and MCP
+
+YTEAM ships a portable, repository-contained skill catalog. It never reads
+`vendor/` checkouts or machine-specific paths on your laptop; a clean clone is
+fully standalone.
+
+```text
+skills/                first-party reviewed SKILL.md playbooks
+skills/catalog.json    portable metadata catalog (union-joined with SKILL.md)
+scripts/yteam_skills.py  registry, risk policy, sections, bundle selection
+scripts/yteam_mcp.py     native MCP stdio server (read-only)
+```
+
+The registry union-joins any first-party `SKILL.md` under `skills/` with the
+`catalog.json` metadata index. A real `SKILL.md` always takes precedence; a
+catalog-only entry is metadata-only and never loads a body until a reviewed
+playbook exists. Risk policy keeps high-risk bodies metadata-only unless an
+explicit local override is set. Start the native stdio MCP server with:
+
+```text
+yteam-mcp
+```
+
+It exposes read-only skill listing/loading, scope validation, Smart Pipe
+filtering, masked secret scanning, and report aggregation. Active network
+assessment remains in the durable `/bb` worker so scope, rate, and audit policy
+cannot be bypassed through MCP.
+
 ## Architecture
 
 ```text
@@ -159,16 +216,18 @@ scripts/yteam_session.py   session facade over durable state
 scripts/yteam_models.py    local config + live model catalog
 scripts/yteam_memory.py    verified two-phase learning memory
 scripts/yteam_control.py   signed Telegram/webhook control plane
+scripts/localsolver.py     LocalSolver FastAPI/Camoufox task service
+scripts/yteam_mcp.py       native MCP stdio server (read-only)
+scripts/yteam_skills.py   first-party skill registry, risk, bundles
 scripts/yteam_native_tools.py
-                            smart pipe, secrets, knowledge, reports
+                             smart pipe, secrets, knowledge, reports
 scripts/yteam_hunt.py      scoped web recon and hypothesis handoff
-scripts/yteam_engine.py    prerequisite-aware DAG orchestration
-src/core/                  multi-pillar assessment control plane
-skills/                    first-party native playbooks
+src/local_solver/          detector, Camoufox adapter, task queue, service
+skills/                    first-party native playbooks + catalog.json
 ```
 
-Optional Camoufox is an isolated observer for browser classification and visual
-review only. It does not solve challenges, evade WAFs, rotate identities, or
+The native gate detector classifies anti-bot/WAF responses and stops or slows
+down safely. It does not solve challenges, evade WAFs, rotate identities, or
 perform credential attacks.
 
 ## Local output
@@ -178,7 +237,7 @@ Runtime and engagement data is intentionally ignored by Git:
 ```text
 runtime/bb-runs/<run-id>/
 runtime/assessments/<run-id>/
-runtime/sessions/<session-id>.jsonl
+runtime/state.db
 runtime/events.jsonl
 ```
 

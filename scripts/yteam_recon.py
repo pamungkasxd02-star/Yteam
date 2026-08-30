@@ -24,7 +24,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from bot_bypass.detector import Botterdop
+from local_solver.detector import LocalSolver
 from yteam_safety import redact_text, redact_url, redact_value
 DEFAULT_OUTPUT = ROOT / "runtime" / "recon"
 ATTRIBUTION = "pamungkas"
@@ -54,7 +54,7 @@ class HTTPObservation:
     server: str = ""
     technologies: list[str] = field(default_factory=list)
     security_headers: dict[str, str] = field(default_factory=dict)
-    botterdop: dict[str, object] = field(default_factory=dict)
+    localsolver: dict[str, object] = field(default_factory=dict)
     error: str = ""
 
 
@@ -163,10 +163,10 @@ class ReconEngine:
         self.resolved_addresses: list[str] = []
         self.notes: list[str] = []
         self.context = ssl.create_default_context()
-        self.botterdop = Botterdop(rate)
+        self.localsolver = LocalSolver(rate)
 
     def request(self, url: str) -> tuple[HTTPObservation, str]:
-        self.botterdop.wait()
+        self.localsolver.wait()
         self.limiter.wait()
         started = time.monotonic()
         request = Request(url, headers=self.headers, method="GET")
@@ -176,7 +176,7 @@ class ReconEngine:
                 elapsed = int((time.monotonic() - started) * 1000)
                 content_type = response.headers.get("Content-Type", "")
                 text = body.decode("utf-8", errors="replace")
-                botterdop = self.botterdop.inspect(dict(response.headers.items()), text, response.status)
+                localsolver = self.localsolver.inspect(dict(response.headers.items()), text, response.status)
                 title = re.search(r"(?is)<title[^>]*>(.*?)</title>", text)
                 observation = HTTPObservation(
                     url=redact_url(url), status=response.status, content_type=content_type, length=len(body), elapsed_ms=elapsed,
@@ -185,19 +185,19 @@ class ReconEngine:
                     server=response.headers.get("Server", ""),
                     technologies=self.technologies(response.headers, text),
                     security_headers=self.security_headers(response.headers),
-                    botterdop=botterdop.__dict__,
+                    localsolver=localsolver.__dict__,
                 )
                 self.observations.append(observation)
-                if botterdop.action in {"stop", "manual_review"}:
-                    self.notes.append(f"Botterdop {botterdop.action}: {botterdop.gate} detected at {redact_url(url)}; subsequent active probes were halted.")
+                if localsolver.action in {"stop", "manual_review"}:
+                    self.notes.append(f"LocalSolver {localsolver.action}: {localsolver.gate} detected at {redact_url(url)}; subsequent active probes were halted.")
                 return observation, text
         except HTTPError as error:
             elapsed = int((time.monotonic() - started) * 1000)
-            botterdop = self.botterdop.inspect(dict(error.headers.items()), "", error.code)
-            observation = HTTPObservation(url=redact_url(url), status=error.code, content_type=error.headers.get("Content-Type", ""), length=0, elapsed_ms=elapsed, botterdop=botterdop.__dict__, error=redact_text(str(error)))
+            localsolver = self.localsolver.inspect(dict(error.headers.items()), "", error.code)
+            observation = HTTPObservation(url=redact_url(url), status=error.code, content_type=error.headers.get("Content-Type", ""), length=0, elapsed_ms=elapsed, localsolver=localsolver.__dict__, error=redact_text(str(error)))
             self.observations.append(observation)
-            if botterdop.action in {"stop", "manual_review"}:
-                self.notes.append(f"Botterdop {botterdop.action}: {botterdop.gate} detected at {redact_url(url)}; subsequent active probes were halted.")
+            if localsolver.action in {"stop", "manual_review"}:
+                self.notes.append(f"LocalSolver {localsolver.action}: {localsolver.gate} detected at {redact_url(url)}; subsequent active probes were halted.")
             return observation, ""
         except (URLError, TimeoutError, OSError) as error:
             observation = HTTPObservation(url=redact_url(url), status=None, content_type="", length=0, elapsed_ms=int((time.monotonic() - started) * 1000), error=redact_text(str(error)))
@@ -291,7 +291,7 @@ class ReconEngine:
         self.resolve_base_dns()
         root_observation, root_body = self.request(self.base)
         self.add_route(self.base, "target", root_observation)
-        if self.botterdop.halted:
+        if self.localsolver.halted:
             root_body = ""
         parser = PageParser()
         if root_body:
@@ -305,7 +305,7 @@ class ReconEngine:
             for raw in INLINE_ROUTE_RE.findall(root_body):
                 self.add_route(urljoin(self.base + "/", raw), "inline-js-route")
         for path in DOC_PATHS:
-            if self.botterdop.halted:
+            if self.localsolver.halted:
                 break
             body = self.stage_probe(urljoin(self.base + "/", path.lstrip("/")), "well-known-or-api-path")
             if body and path.endswith("robots.txt"):
@@ -317,7 +317,7 @@ class ReconEngine:
             if body and path.endswith("sitemap.xml"):
                 for discovered in re.findall(r"(?is)<loc>\s*([^<]+?)\s*</loc>", body):
                     self.add_route(discovered.strip(), "sitemap")
-        if not self.botterdop.halted:
+        if not self.localsolver.halted:
             self.discover_passive_assets()
         intelligence_dir = self.output / "intelligence"
         intelligence_dir.mkdir(parents=True, exist_ok=True)
@@ -334,7 +334,7 @@ class ReconEngine:
         for current_depth in range(1, self.depth):
             next_frontier: list[str] = []
             for url in frontier[:30]:
-                if self.botterdop.halted:
+                if self.localsolver.halted:
                     break
                 if urlparse(url).path.lower().endswith(STATIC_SUFFIXES):
                     continue
@@ -369,7 +369,7 @@ class ReconEngine:
             "intelligence_observations": str(intelligence_dir / "observations.jsonl"),
             "notes": self.notes,
             "non_claims": ["Recon output is not vulnerability proof.", "Priority is triage guidance, not severity."],
-            "botterdop": self.botterdop.summary(),
+            "localsolver": self.localsolver.summary(),
         }
         safe_result = redact_value(result)
         (self.output / "recon.json").write_text(json.dumps(safe_result, indent=2) + "\n", encoding="utf-8")

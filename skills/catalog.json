@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "note": "Portable first-party YTEAM skill metadata catalog. Each entry mirrors a reviewed SKILL.md under skills/<name>/SKILL.md. The runtime union-joins this catalog with any first-party SKILL.md it finds; a real SKILL.md always takes precedence over this metadata-only entry. Body loading is disabled for metadata-only entries until a reviewed SKILL.md is present.",
+  "skills": [
+    {
+      "name": "yteam-recon",
+      "description": "Map authorized web surfaces with bounded, read-only requests.",
+      "categories": ["recon", "infra"],
+      "risk": "safe_reference",
+      "content_sha256": "metadata-only",
+      "sections": []
+    },
+    {
+      "name": "yteam-authorization",
+      "description": "Validate object and function authorization across owned identities.",
+      "categories": ["authorization"],
+      "risk": "safe_reference",
+      "content_sha256": "metadata-only",
+      "sections": []
+    },
+    {
+      "name": "yteam-injection",
+      "description": "Test input boundaries with safe, evidence-first canaries.",
+      "categories": ["injection"],
+      "risk": "controlled",
+      "content_sha256": "metadata-only",
+      "sections": []
+    },
+    {
+      "name": "yteam-reporting",
+      "description": "Turn verified evidence into a concise, reproducible report.",
+      "categories": ["reporting"],
+      "risk": "safe_reference",
+      "content_sha256": "metadata-only",
+      "sections": []
+    },
+    {
+      "name": "yteam-runtime",
+      "description": "Operate the standalone YTEAM runtime and persistent session state.",
+      "categories": ["logic", "infra"],
+      "risk": "safe_reference",
+      "content_sha256": "metadata-only",
+      "sections": []
+    }
+  ]
+}

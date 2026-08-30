@@ -10,6 +10,10 @@ under their respective licenses.
 |---|---|---|
 | PyYAML | https://pypi.org/project/PyYAML/ | MIT |
 | Camoufox | https://github.com/daijro/camoufox | Mozilla Public License 2.0 |
+| FastAPI | https://github.com/fastapi/fastapi | MIT |
+| Uvicorn | https://github.com/encode/uvicorn | BSD-3-Clause |
+| Playwright Python | https://github.com/microsoft/playwright-python | Apache-2.0 |
+| MCP Python SDK | https://github.com/modelcontextprotocol/python-sdk | MIT |
 
 The YTEAM source files are licensed under the repository `LICENSE`. No vendor
 checkout, generated runtime data, engagement evidence, or model credentials

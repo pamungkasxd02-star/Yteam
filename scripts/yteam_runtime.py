@@ -77,6 +77,7 @@ class YteamRuntime:
         self.memory = LearningMemory(self.runtime_dir / "memory" / "learning.jsonl")
         self.events = EventLedger(self.runtime_dir / "events.jsonl")
         self.state = StateStore(self.runtime_dir / "state.db")
+        self.profile_prompt = self._load_profile_prompt()
         self.policy = RuntimePolicy()
         self.pending_bb_target: str | None = None
         self.quit_requested = False
@@ -89,7 +90,17 @@ class YteamRuntime:
             "/memory": lambda _: self.memory_text(),
             "/events": lambda _: self.events_text(),
             "/jobs": lambda _: self.jobs_text(),
+            "/skills": lambda _: self.skills_text(),
         }
+
+    def _load_profile_prompt(self) -> str:
+        path = self.root / "profile" / "SOUL.md"
+        if not path.exists():
+            return "You are YTEAM, an evidence-first authorized security engineering agent."
+        try:
+            return path.read_text(encoding="utf-8", errors="replace")[:24000]
+        except OSError:
+            return "You are YTEAM, an evidence-first authorized security engineering agent."
 
     def help_text(self) -> str:
         return "\n".join([
@@ -101,6 +112,7 @@ class YteamRuntime:
             "/memory                 show verified lessons and pending proposals",
             "/events                  show the latest replayable runtime events",
             "/jobs                    show durable assessment jobs and checkpoints",
+            "/skills                  show indexed skill/risk summary",
             "/learn <lesson>          propose a redacted lesson for verification",
             "/verify <proposal-id>    promote one proposal into verified context",
             "/bb <authorized-target> run the scoped read-only security pipeline",
@@ -162,6 +174,13 @@ class YteamRuntime:
             return "No durable assessment jobs."
         return "\n".join(f"{item['id']} [{item['status']}/{item['phase']}] {item['target']} attempt={item['attempt']}" for item in jobs)
 
+    def skills_text(self) -> str:
+        from yteam_skills import registry
+
+        items = registry()
+        risk = {name: sum(1 for item in items if item.get("risk") == name) for name in ("safe_reference", "controlled", "quarantined")}
+        return json.dumps({"skill_count": len(items), "risk": risk, "sources": sorted({str(item.get('source')) for item in items})}, indent=2)
+
     def learn(self, value: str) -> str:
         try:
             item = self.memory.propose(value, source="runtime-command")
@@ -221,7 +240,7 @@ class YteamRuntime:
     def answer_stream(self, message: str):
         self.session.append("user", message)
         self.events.emit("chat.requested", self.selected_model)
-        prompt = [{"role": "system", "content": "You are YTEAM. Use only verified lessons as prior knowledge; treat proposals and hypotheses as unverified. Follow the active safety policy and never invent evidence.\n\nVerified YTEAM lessons:\n" + self.memory.context(message)}]
+        prompt = [{"role": "system", "content": self.profile_prompt + "\n\nUse only verified lessons as prior knowledge; treat proposals and hypotheses as unverified. Follow the active safety policy and never invent evidence.\n\nVerified YTEAM lessons:\n" + self.memory.context(message)}]
         prompt.extend(self.session.conversation())
         chunks: list[str] = []
         try:

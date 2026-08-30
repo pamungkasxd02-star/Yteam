@@ -62,13 +62,28 @@ class StandaloneYteamTests(unittest.TestCase):
     def test_native_surface_has_no_required_upstream_runtime(self) -> None:
         required = (
             "yteam_tui.py", "yteam_runtime.py", "yteam_models.py", "yteam_ai.py",
-            "yteam_session.py", "yteam_native_tools.py", "yteam_hunt.py",
+            "yteam_session.py", "yteam_native_tools.py", "yteam_hunt.py", "yteam_worker.py",
         )
         for name in required:
             self.assertTrue((SCRIPTS / name).exists(), name)
         self.assertFalse((ROOT / "opencode.json").exists())
         self.assertFalse((SCRIPTS / "hermes_opencode.py").exists())
         self.assertFalse((SCRIPTS / "bootstrap_sources.py").exists())
+
+    def test_superseded_wrappers_are_removed(self) -> None:
+        for name in ("botterdop.py", "cybermes.py", "index_skills.py", "yteam_knowledge.py", "yteam_parallel.py", "yteam_run.py", "yteam_engine.py", "init_yteam.py", "yteam_assessment.py"):
+            self.assertFalse((SCRIPTS / name).exists(), name)
+        for relative in ("src/core/assessment.py", "src/decrypt/detect.py", "src/pentest_qa/qa.py", "src/server_guard/guard.py"):
+            self.assertFalse((ROOT / relative).exists(), relative)
+        self.assertTrue((ROOT / "src" / "local_solver" / "camoufox_adapter.py").exists())
+
+    def test_profile_soul_is_loaded_as_native_system_prompt(self) -> None:
+        from yteam_runtime import YteamRuntime
+
+        with patch("yteam_runtime.discover_free_models", return_value=["model-a"]):
+            runtime = YteamRuntime(ROOT)
+        self.assertIn("YTEAM", runtime.profile_prompt)
+        self.assertIn("authorized", runtime.profile_prompt.lower())
 
     def test_profile_and_docs_describe_standalone_runtime(self) -> None:
         config = (ROOT / "profile" / "config.yaml").read_text(encoding="utf-8")
@@ -241,6 +256,73 @@ class StandaloneYteamTests(unittest.TestCase):
             self.assertGreaterEqual(result["request_count"], 1)
             self.assertTrue((Path(directory) / "recon.json").exists())
             self.assertTrue(any("/api/profile?id=1" in item["url"] for item in result["routes"]))
+            self.assertIn("localsolver", result)
+
+    def test_localsolver_allowlist_queue_and_safe_url(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from local_solver.camoufox_adapter import safe_url, same_origin
+            from local_solver.service import LocalSolverService, allowed_target
+        finally:
+            sys.path.remove(str(ROOT / "src"))
+        self.assertTrue(same_origin("https://example.test/a", "https://example.test/b"))
+        self.assertNotIn("oauth-live", safe_url("https://example.test/cb?code=oauth-live&next=%2Fhome"))
+        self.assertTrue(allowed_target("https://example.test", {"https://example.test"}))
+        self.assertFalse(allowed_target("http://127.0.0.1:80", {"https://example.test"}))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.dict(os.environ, {"LOCALSOLVER_TARGET_ALLOWLIST": "https://example.test"}, clear=False):
+                service = LocalSolverService(root, workers=1)
+                service.stop.set()
+                task = service.submit("https://example.test")
+                self.assertEqual(task["status"], "queued")
+                self.assertIn("task_id", task)
+                with self.assertRaises(PermissionError):
+                    service.submit("https://other.test")
+                service.close()
+
+    def test_first_party_skill_registry_is_portable_and_risk_aware(self) -> None:
+        from yteam_skills import get_skill, registry, source_roots
+
+        # Registry is strictly first-party: it must never traverse vendor trees.
+        self.assertTrue(all(str(path).replace("\\", "/").startswith("skills/") or str(path).endswith("skills") for path in source_roots()))
+        items = registry()
+        names = {str(item["name"]): item for item in items}
+        # Reviewed first-party SKILL.md entries load their body on demand.
+        self.assertIn("yteam-recon", names)
+        loaded = get_skill(items, "yteam-recon")
+        self.assertEqual(loaded["access"], "loaded")
+        self.assertIn("Recon is complete", loaded["content"])
+        # A metadata-only catalog entry with no SKILL.md never loads a body.
+        metadata_only = {str(item["name"]): item for item in items if not str(item.get("path", ""))}
+        for name, item in metadata_only.items():
+            fetched = get_skill(items, name)
+            self.assertEqual(fetched["access"], "metadata_only")
+            self.assertEqual(fetched["content"], "")
+        # A first-party skill whose risk classifies as quarantined is body-blocked.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "skills"
+            risky = root / "reverse-shell-techniques"
+            risky.mkdir(parents=True)
+            (risky / "SKILL.md").write_text("---\nname: reverse-shell-techniques\ndescription: reverse-shell\n---\n# Payloads\nquarantined\n", encoding="utf-8")
+            synthetic = registry() + [
+                {
+                    "name": "reverse-shell-techniques",
+                    "description": "reverse-shell",
+                    "path": str(risky / "SKILL.md"),
+                    "source": "skills",
+                    "categories": ["injection"],
+                    "content_sha256": "x",
+                    "size_bytes": 0,
+                    "line_count": 0,
+                    "sections": [],
+                    "risk": "quarantined",
+                    "load_policy": "metadata_only",
+                }
+            ]
+            blocked = get_skill(synthetic, "reverse-shell-techniques")
+            self.assertEqual(blocked["access"], "quarantined")
+            self.assertEqual(blocked["content"], "")
 
     def test_native_hunt_writes_adaptive_context_and_bundle(self) -> None:
         from yteam_hunt import run
@@ -283,10 +365,9 @@ class StandaloneYteamTests(unittest.TestCase):
         self.assertIn("yteam_tui.py", installer)
         self.assertIn("yteam_control.py", installer)
         self.assertIn("yteam_worker.py", installer)
-        self.assertIn("yteam_control.py", installer)
-        self.assertNotIn("bootstrap_sources", installer)
-        self.assertNotIn("full-sources", installer)
-        self.assertNotIn("with-opencode", installer)
+        self.assertIn("camoufox", installer.lower())
+        self.assertIn("localsolver.py", installer)
+        self.assertIn("yteam_mcp.py", installer)
         result = subprocess.run([sys.executable, str(SCRIPTS / "install_yteam.py"), "--dry-run"], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0)
         self.assertIn("standalone YTEAM", result.stdout)

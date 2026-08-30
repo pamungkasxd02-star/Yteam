@@ -9,9 +9,7 @@ bar. The runtime remains usable over SSH, pipes, and remote control adapters.
 from __future__ import annotations
 
 import argparse
-import os
 import shutil
-import subprocess
 import sys
 import textwrap
 from collections import deque
