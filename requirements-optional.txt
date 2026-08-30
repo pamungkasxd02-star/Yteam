@@ -1,3 +1,0 @@
-# Optional browser observation for Botterdop. Install in the active Hermes/Yteam
-# environment only; do not install into a personal/global browser profile.
-camoufox

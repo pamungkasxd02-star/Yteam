@@ -281,6 +281,7 @@ class ProjectLayoutTests(unittest.TestCase):
         self.assertIn("--resume", text)
         self.assertIn("--camoufox", text)
         self.assertIn("hidden_surface.json", (ROOT / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("install_yteam.py", (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertIn("never auto-submit", text)
 
     def test_cybermes_source_and_intelligence_layer_are_wired(self) -> None:
@@ -322,6 +323,14 @@ class ProjectLayoutTests(unittest.TestCase):
             sys.path.remove(str(ROOT / "scripts"))
         self.assertIn("hermes_opencode.py", text)
         self.assertIn("%*" if sys.platform == "win32" else '"$@"', text)
+
+    def test_installer_has_one_command_setup_and_optional_camoufox_switches(self) -> None:
+        installer = (ROOT / "scripts" / "install_yteam.py").read_text(encoding="utf-8")
+        self.assertIn("bootstrap_sources()", installer)
+        self.assertIn("install_dependencies", installer)
+        self.assertIn("--skip-browser-download", installer)
+        self.assertIn("--dry-run", installer)
+        self.assertIn("BUN_INSTALL", installer)
 
     def test_direct_cybermes_wrapper_has_no_protocol_server_dependency(self) -> None:
         wrapper = (ROOT / "scripts" / "cybermes.py").read_text(encoding="utf-8")
@@ -598,12 +607,8 @@ class ProjectLayoutTests(unittest.TestCase):
         self.assertIn("authorized security testing", license_text)
 
     def test_github_open_source_docs_and_bootstrap_exist(self) -> None:
-        for relative in ("REQUIREMENTS.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md", "docs/GETTING_STARTED.md", "docs/ARCHITECTURE.md", "docs/PUBLISHING.md", "scripts/bootstrap_sources.py", ".github/workflows/ci.yml", ".gitignore"):
+        for relative in ("REQUIREMENTS.md", "requirements.txt", "SECURITY.md", "THIRD_PARTY_NOTICES.md", "docs/PUBLISHING.md", "scripts/bootstrap_sources.py", ".github/workflows/ci.yml", ".gitignore"):
             self.assertTrue((ROOT / relative).exists(), relative)
-        getting_started = (ROOT / "docs" / "GETTING_STARTED.md").read_text(encoding="utf-8")
-        self.assertIn("/bb https://authorized-target.example", getting_started)
-        self.assertIn("Windows PowerShell", getting_started)
-        self.assertIn("macOS/Linux", getting_started)
         requirements = (ROOT / "REQUIREMENTS.md").read_text(encoding="utf-8")
         self.assertIn("yteam.local.yaml", requirements)
         self.assertIn("Camoufox", requirements)
@@ -702,8 +707,9 @@ class ProjectLayoutTests(unittest.TestCase):
         doctor = ROOT / "scripts" / "yteam_doctor.py"
         self.assertTrue(doctor.exists())
         self.assertIn("def run()", doctor.read_text(encoding="utf-8"))
-        optional = (ROOT / "requirements-optional.txt").read_text(encoding="utf-8")
-        self.assertIn("camoufox", optional)
+        requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+        self.assertIn("camoufox", requirements)
+        self.assertIn("PyYAML", requirements)
         self.assertFalse((ROOT / ".opencode" / "command" / "doctor.md").exists())
 
     def test_single_file_model_config_is_local_only_and_maps_credentials_ephemerally(self) -> None:

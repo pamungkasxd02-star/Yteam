@@ -52,8 +52,8 @@ python3 scripts/bootstrap_sources.py
 On Windows use `python` instead of `python3`. The bootstrap performs shallow
 checkouts and a sparse Cybermes checkout that avoids Windows path-length
 failures while retaining the Cybermes engine, tests, skills, tools, docs,
-metadata, and selected text-only JWT/auth knowledge sources. Follow
-`docs/GETTING_STARTED.md` for the runtime setup.
+metadata, and selected text-only JWT/auth knowledge sources. Follow the root
+`README.md` and `REQUIREMENTS.md` for the runtime setup.
 
 ## Release checklist
 
