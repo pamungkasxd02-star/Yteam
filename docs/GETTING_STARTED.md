@@ -48,7 +48,8 @@ python3 scripts/install_yteam.py
 
 `bootstrap_sources.py` keeps OpenCode, Hermes Agent, and Cybermes as separate
 upstream checkouts. Cybermes uses a sparse checkout to avoid Windows filename
-length failures while retaining its engine, skills, docs, tools, and metadata.
+length failures while retaining its engine, tests, skills, docs, tools,
+metadata, and selected text-only JWT/auth knowledge sources.
 
 ## Configure a model
 

@@ -2,8 +2,9 @@
 """Fetch Yteam's upstream source dependencies into vendor/.
 
 Uses shallow Git checkouts. Cybermes is sparse-checked out to avoid Windows
-path-length failures in its optional knowledge image corpus; its Go engine,
-skills, tools, docs, and metadata are retained.
+path-length failures in its optional knowledge image corpus while retaining
+the Go engine, tests, skills, tools, docs, metadata, and selected text
+knowledge sources used by its search tests.
 """
 
 from __future__ import annotations
@@ -21,7 +22,17 @@ SOURCES = {
     "hermes-agent": ("https://github.com/NousResearch/hermes-agent.git", "main"),
     "cybermes": ("https://github.com/Zyrexnn/Cybermes.git", "main"),
 }
-CYBERMES_SPARSE = [".hermes", "cmd", "docs", "examples", "pkg", "scripts", "skills", "templates", "tools", "targets", "assets", "README.md", "AGENTS.md", "ATTRIBUTION.md", "LICENSE", "ROADMAP.md", "go.mod", "go.sum", "package.json", "pyproject.toml", "requirements.txt", "scope.yaml"]
+CYBERMES_SPARSE = [
+    ".hermes", "cmd", "docs", "examples", "pkg", "scripts", "skills",
+    "templates", "tools", "targets", "assets", "README.md", "AGENTS.md",
+    "ATTRIBUTION.md", "LICENSE", "ROADMAP.md", "go.mod", "go.sum",
+    "package.json", "pyproject.toml", "requirements.txt", "scope.yaml",
+    # Keep text-only JWT/auth sources needed by Cybermes's knowledge search.
+    "knowledge/PayloadsAllTheThings/JSON Web Token",
+    "knowledge/hack-skills/skills/jwt-oauth-token-attacks",
+    "knowledge/Claude-BugHunter/skills/hunt-jwt-crypto",
+    "knowledge/strix-skills/vulnerabilities/authentication_jwt.md",
+]
 
 
 def run(command: list[str], cwd: Path | None = None) -> None:
@@ -43,7 +54,7 @@ def clone(name: str, url: str, branch: str, refresh: bool) -> None:
     if name == "cybermes":
         run(["git", "clone", "--filter=blob:none", "--no-checkout", "--sparse", "--branch", branch, url, str(destination)])
         run(["git", "-C", str(destination), "config", "core.longpaths", "true"])
-        run(["git", "-C", str(destination), "sparse-checkout", "set", *CYBERMES_SPARSE])
+        run(["git", "-C", str(destination), "sparse-checkout", "set", "--skip-checks", *CYBERMES_SPARSE])
         run(["git", "-C", str(destination), "checkout", branch])
         return
     run(["git", "clone", "--depth", "1", "--branch", branch, url, str(destination)])

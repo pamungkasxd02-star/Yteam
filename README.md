@@ -374,7 +374,8 @@ Update them explicitly from their upstream remotes; do not update the installed 
 
 Python, Git, and Bun are required for the normal TUI flow. Go is optional but recommended: without Go, the Cybermes direct utilities are marked unavailable while the native Python recon/analysis workflow still works. External tools such as Katana, ProjectDiscovery HTTPX, Subfinder, `gau`, `waybackurls`, Nuclei, FFUF, Arjun, Nmap, Naabu, Dalfox, and SQLMap are optional; Yteam detects them and uses missing-safe fallbacks.
 
-Full dependency, tool, OS, model, browser, and feature matrix: `docs/REQUIREMENTS.md`.
+Quick setup requirements: `REQUIREMENTS.md`. Full dependency, tool, OS, model,
+browser, and feature matrix: `docs/REQUIREMENTS.md`.
 
 The TUI's local OpenCode tool permissions are intentionally disabled in this integration. This prevents a second, competing tool loop: Hermes remains the single owner of terminal, browser, memory, skills, vision, evidence, and report execution.
 

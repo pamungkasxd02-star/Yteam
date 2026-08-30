@@ -598,12 +598,15 @@ class ProjectLayoutTests(unittest.TestCase):
         self.assertIn("authorized security testing", license_text)
 
     def test_github_open_source_docs_and_bootstrap_exist(self) -> None:
-        for relative in ("SECURITY.md", "THIRD_PARTY_NOTICES.md", "docs/GETTING_STARTED.md", "docs/ARCHITECTURE.md", "docs/PUBLISHING.md", "scripts/bootstrap_sources.py", ".github/workflows/ci.yml", ".gitignore"):
+        for relative in ("REQUIREMENTS.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md", "docs/GETTING_STARTED.md", "docs/ARCHITECTURE.md", "docs/PUBLISHING.md", "scripts/bootstrap_sources.py", ".github/workflows/ci.yml", ".gitignore"):
             self.assertTrue((ROOT / relative).exists(), relative)
         getting_started = (ROOT / "docs" / "GETTING_STARTED.md").read_text(encoding="utf-8")
         self.assertIn("/bb https://authorized-target.example", getting_started)
         self.assertIn("Windows PowerShell", getting_started)
         self.assertIn("macOS/Linux", getting_started)
+        requirements = (ROOT / "REQUIREMENTS.md").read_text(encoding="utf-8")
+        self.assertIn("yteam.local.yaml", requirements)
+        self.assertIn("Camoufox", requirements)
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("contents: read", workflow)
         self.assertIn("bootstrap_sources.py", workflow)

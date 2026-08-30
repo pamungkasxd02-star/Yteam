@@ -5,7 +5,7 @@ keeping OpenCode, Hermes Agent, and Cybermes as reproducible upstream sources.
 
 ## Before publishing
 
-1. Review `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, and `THIRD_PARTY_NOTICES.md`.
+1. Review `REQUIREMENTS.md`, `LICENSE`, `SECURITY.md`, `CONTRIBUTING.md`, and `THIRD_PARTY_NOTICES.md`.
 2. Keep `vendor/SOURCES.md` current with the upstream URLs and revisions.
 3. Do not publish `runtime/`, `.env`, `auth.json`, session databases, cookies,
    reports containing customer data, or unredacted evidence.
@@ -51,8 +51,9 @@ python3 scripts/bootstrap_sources.py
 
 On Windows use `python` instead of `python3`. The bootstrap performs shallow
 checkouts and a sparse Cybermes checkout that avoids Windows path-length
-failures while retaining the Cybermes engine, skills, tools, docs, and
-metadata. Follow `docs/GETTING_STARTED.md` for the runtime setup.
+failures while retaining the Cybermes engine, tests, skills, tools, docs,
+metadata, and selected text-only JWT/auth knowledge sources. Follow
+`docs/GETTING_STARTED.md` for the runtime setup.
 
 ## Release checklist
 
