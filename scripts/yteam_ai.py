@@ -8,6 +8,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -18,8 +19,8 @@ class ChatRequest:
     max_tokens: int = 4096
 
 
-def stream_chat(config: dict[str, str], messages: list[dict[str, str]]) -> Iterator[str]:
-    """Yield text deltas from an OpenAI-compatible chat-completions endpoint."""
+def stream_chat_events(config: dict[str, str], messages: list[dict[str, str]]) -> Iterator[dict[str, Any]]:
+    """Yield provider-neutral events while reading an OpenAI-compatible SSE stream."""
     request_data = ChatRequest(config["model"], messages)
     body = json.dumps({
         "model": request_data.model,
@@ -44,15 +45,30 @@ def stream_chat(config: dict[str, str], messages: list[dict[str, str]]) -> Itera
                 continue
             payload = line[6:]
             if payload == "[DONE]":
+                yield {"type": "turn.completed"}
                 break
             try:
                 chunk = json.loads(payload)
             except json.JSONDecodeError:
                 continue
+            usage = chunk.get("usage")
+            if isinstance(usage, dict):
+                yield {"type": "usage.updated", "usage": usage}
             for choice in chunk.get("choices", []):
-                text = ((choice.get("delta") or {}).get("content"))
+                delta = choice.get("delta") or {}
+                text = delta.get("content")
                 if isinstance(text, str) and text:
-                    yield text
+                    yield {"type": "message.delta", "text": text}
+                reasoning = delta.get("reasoning_content") or delta.get("reasoning")
+                if isinstance(reasoning, str) and reasoning:
+                    yield {"type": "reasoning.delta", "text": reasoning}
+
+
+def stream_chat(config: dict[str, str], messages: list[dict[str, str]]) -> Iterator[str]:
+    """Yield text deltas from an OpenAI-compatible chat-completions endpoint."""
+    for event in stream_chat_events(config, messages):
+        if event.get("type") == "message.delta":
+            yield str(event["text"])
 
 
 def complete_chat(config: dict[str, str], messages: list[dict[str, str]]) -> str:

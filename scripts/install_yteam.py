@@ -31,11 +31,27 @@ def launcher_text(target: Path) -> str:
     return f'#!/usr/bin/env sh\nset -eu\nexec python3 "{target / "scripts" / "yteam_tui.py"}" "$@"\n'
 
 
+def control_launcher_text(target: Path) -> str:
+    if os.name == "nt":
+        return f'@echo off\npython "{target / "scripts" / "yteam_control.py"}" %*\n'
+    return f'#!/usr/bin/env sh\nset -eu\nexec python3 "{target / "scripts" / "yteam_control.py"}" "$@"\n'
+
+
 def install(destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     name = "yteam.cmd" if os.name == "nt" else "yteam"
     path = destination / name
     path.write_text(launcher_text(ROOT), encoding="utf-8", newline="\n")
+    if os.name != "nt":
+        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return path
+
+
+def install_control(destination: Path) -> Path:
+    destination.mkdir(parents=True, exist_ok=True)
+    name = "yteam-control.cmd" if os.name == "nt" else "yteam-control"
+    path = destination / name
+    path.write_text(control_launcher_text(ROOT), encoding="utf-8", newline="\n")
     if os.name != "nt":
         path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
     return path
@@ -92,8 +108,11 @@ def setup(args: argparse.Namespace) -> Path:
         return (args.bin_dir or default_bin()).resolve() / ("yteam.cmd" if os.name == "nt" else "yteam")
     uv = ensure_uv()
     install_dependencies(uv, not args.skip_browser_download)
-    path = install((args.bin_dir or default_bin()).resolve())
+    destination = (args.bin_dir or default_bin()).resolve()
+    path = install(destination)
+    control_path = install_control(destination)
     print(f"Installed YTEAM launcher: {path}")
+    print(f"Installed YTEAM control launcher: {control_path}")
     print("Global OpenCode was not modified.")
     return path
 

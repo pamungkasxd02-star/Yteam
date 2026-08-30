@@ -55,6 +55,10 @@ Commands:
 /status                       show policy/session/runtime state
 /history                      show the current bounded conversation
 /clear                        create a fresh local session
+/memory                       show verified lessons and pending proposals
+/events                       show replayable runtime events
+/learn <lesson>               propose a lesson for verification
+/verify <proposal-id>         verify a lesson for future prompt context
 /doctor                       run local diagnostics
 /bb <authorized-http-target>  run the scoped read-only assessment
 /quit                         exit
@@ -91,14 +95,45 @@ the live catalog and falls back to a bundled list when the endpoint is offline.
 The native client sends standard OpenAI-compatible `POST /chat/completions`
 requests with SSE streaming. It does not start a gateway or proxy process.
 
+## Remote control
+
+Remote control is opt-in and local-only by default. The installer also creates
+`yteam-control`. It accepts signed webhook commands for Discord and WhatsApp
+bridges and can long-poll Telegram when its token and actor allowlist are set.
+
+```powershell
+$env:YTEAM_CONTROL_SECRET = "use-a-long-random-local-secret"
+$env:YTEAM_TELEGRAM_BOT_TOKEN = "bot-token-from-your-secret-store"
+$env:YTEAM_TELEGRAM_ALLOWLIST = "telegram-chat-id"
+$env:YTEAM_DISCORD_ALLOWLIST = "discord-user-id"
+$env:YTEAM_WHATSAPP_ALLOWLIST = "E.164-sender-id"
+$env:YTEAM_REMOTE_TARGET_ALLOWLIST = "https://authorized-target.example"
+yteam-control
+```
+
+Telegram uses the official Bot API long-polling endpoint. Discord and WhatsApp
+use provider webhooks or a separate bridge that signs the canonical request:
+`METHOD + "\n" + PATH + "\n" + BODY` with HMAC-SHA256 and sends it as
+`X-YTEAM-Signature: sha256=<hex>`. YTEAM does not store bot tokens and does not
+implement either provider's network protocol as a fake in-process client.
+
+Only allowlisted actors can issue commands. `/bb` additionally requires an
+exact target in `YTEAM_REMOTE_TARGET_ALLOWLIST`; `/quit` is permanently blocked
+remotely. Every accepted or denied command is recorded in the runtime event
+ledger. Never send cookies, API keys, passwords, or customer data through a
+chat adapter.
+
 ## Architecture
 
 ```text
 scripts/yteam_tui.py       terminal UI
 scripts/yteam_runtime.py   commands, policy, events, model/session lifecycle
 scripts/yteam_ai.py        direct OpenAI-compatible SSE client
-scripts/yteam_session.py   bounded JSONL conversations
+scripts/yteam_state.py     SQLite WAL sessions, messages, and event sequences
+scripts/yteam_session.py   session facade over durable state
 scripts/yteam_models.py    local config + live model catalog
+scripts/yteam_memory.py    verified two-phase learning memory
+scripts/yteam_control.py   signed Telegram/webhook control plane
 scripts/yteam_native_tools.py
                             smart pipe, secrets, knowledge, reports
 scripts/yteam_hunt.py      scoped web recon and hypothesis handoff

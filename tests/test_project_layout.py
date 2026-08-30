@@ -113,7 +113,7 @@ class StandaloneYteamTests(unittest.TestCase):
             for index in range(5):
                 session.append("user", f"message-{index}")
             self.assertEqual(len(session.conversation(3)), 3)
-            self.assertEqual(len((Path(directory) / "test-session.jsonl").read_text(encoding="utf-8").splitlines()), 5)
+            self.assertTrue((Path(directory) / "state.db").exists())
             reloaded = Session(Path(directory), "test-session")
             self.assertEqual(reloaded.messages[-1]["content"], "message-4")
 
@@ -137,6 +137,49 @@ class StandaloneYteamTests(unittest.TestCase):
             events = (root / "runtime" / "events.jsonl").read_text(encoding="utf-8")
             self.assertIn("model.selected", events)
             self.assertIn("bb.requested", events)
+
+    def test_memory_requires_verification_before_prompt_context(self) -> None:
+        from yteam_memory import LearningMemory
+
+        with tempfile.TemporaryDirectory() as directory:
+            memory = LearningMemory(Path(directory) / "learning.jsonl")
+            proposal = memory.propose("Fixture API returns 403 for an unknown object", source="test")
+            self.assertEqual(memory.context(), "No verified YTEAM lessons are available for this request.")
+            verified = memory.verify(str(proposal["id"]), verifier="test")
+            self.assertEqual(verified["status"], "verified")
+            self.assertIn("Fixture API returns 403", memory.context("API"))
+
+    def test_remote_control_requires_hmac_actor_and_exact_target_allowlist(self) -> None:
+        from yteam_control import ControlPlane
+        from yteam_runtime import YteamRuntime
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.dict(os.environ, {"YTEAM_CONTROL_SECRET": "control-secret", "YTEAM_TELEGRAM_ALLOWLIST": "chat-1", "YTEAM_REMOTE_TARGET_ALLOWLIST": "https://authorized.test"}, clear=False):
+                with patch("yteam_runtime.discover_free_models", return_value=["model-a"]):
+                    runtime = YteamRuntime(root)
+                plane = ControlPlane(runtime, root)
+                body = b'{"actor":"chat-1","text":"/status"}'
+                signature = plane.signature(body, "POST", "/webhook/telegram")
+                self.assertTrue(plane.verify_signature(body, signature, "POST", "/webhook/telegram"))
+                self.assertFalse(plane.verify_signature(body, signature, "POST", "/webhook/discord"))
+                self.assertIn('"runtime": "standalone"', plane.execute("telegram", "chat-1", "/status"))
+            self.assertIn("not allowlisted", plane.execute("telegram", "other", "/status"))
+            self.assertIn("target is not", plane.execute("telegram", "chat-1", "/bb https://other.test"))
+            self.assertIn("Queued read-only", plane.execute("telegram", "chat-1", "/bb https://authorized.test"))
+
+    def test_state_store_replays_ordered_events_and_redacts_payloads(self) -> None:
+        from yteam_state import StateStore
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = StateStore(Path(directory) / "state.db")
+            first = store.emit("session-1", "tool.started", "Authorization: Bearer live-secret", {"token": "live-token", "ok": True})
+            second = store.emit("session-1", "tool.completed", "done", {"value": 2})
+            self.assertEqual((first["sequence"], second["sequence"]), (1, 2))
+            events = store.events("session-1")
+            self.assertEqual([item["sequence"] for item in events], [1, 2])
+            self.assertNotIn("live-secret", json.dumps(events))
+            self.assertEqual(store.events("session-1", after=1)[0]["kind"], "tool.completed")
 
     def test_native_ai_client_streams_sse_without_api_key_for_free(self) -> None:
         from yteam_ai import stream_chat
@@ -220,6 +263,7 @@ class StandaloneYteamTests(unittest.TestCase):
         installer = (SCRIPTS / "install_yteam.py").read_text(encoding="utf-8")
         self.assertIn('ROOT / "runtime" / ".venv"', installer)
         self.assertIn("yteam_tui.py", installer)
+        self.assertIn("yteam_control.py", installer)
         self.assertNotIn("bootstrap_sources", installer)
         self.assertNotIn("full-sources", installer)
         self.assertNotIn("with-opencode", installer)

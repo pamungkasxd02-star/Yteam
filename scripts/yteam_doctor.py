@@ -25,6 +25,7 @@ def run() -> dict[str, object]:
     checks.append(check("native-tui", (ROOT / "scripts" / "yteam_tui.py").exists(), "scripts/yteam_tui.py"))
     checks.append(check("native-runtime", (ROOT / "scripts" / "yteam_runtime.py").exists(), "scripts/yteam_runtime.py"))
     checks.append(check("native-tools", (ROOT / "scripts" / "yteam_native_tools.py").exists(), "scripts/yteam_native_tools.py"))
+    checks.append(check("control-plane", (ROOT / "scripts" / "yteam_control.py").exists(), "signed Telegram/Discord/WhatsApp adapter"))
     uv = shutil.which("uv")
     checks.append(check("uv", bool(uv), uv or "not found; installer can bootstrap it", required=False))
     camoufox = importlib.util.find_spec("camoufox") is not None
