@@ -55,9 +55,9 @@ jobs:
       - name: Test Cybermes
         working-directory: vendor/cybermes
         run: go test ./...
-      - name: Install OpenCode dependencies
+      - name: Install OpenCode runtime dependencies
         working-directory: vendor/opencode
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --filter opencode
       - name: Typecheck OpenCode package
         working-directory: vendor/opencode/packages/opencode
         run: bun run typecheck

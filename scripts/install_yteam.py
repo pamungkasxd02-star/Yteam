@@ -116,7 +116,11 @@ def install_dependencies(uv: str, bun: str, fetch_browser: bool) -> None:
     run_command([uv, "pip", "install", "--python", str(python_in_venv()), "-r", str(ROOT / "requirements.txt")], cwd=ROOT)
     bun_env = os.environ.copy()
     bun_env["PATH"] = str(Path(bun).resolve().parent) + os.pathsep + bun_env.get("PATH", "")
-    run_command([bun, "install", "--frozen-lockfile"], cwd=OPENCODE_ROOT, env=bun_env)
+    # Install only the OpenCode TUI workspace and its runtime workspace
+    # dependencies. A root-wide install also resolves unrelated console/stats
+    # packages (including ephemeral pkg.pr.new previews) that are not shipped
+    # by YTEAM's sparse runtime profile.
+    run_command([bun, "install", "--frozen-lockfile", "--filter", "opencode"], cwd=OPENCODE_ROOT, env=bun_env)
     if fetch_browser:
         cache = Path(os.environ.get("CAMOUFOX_CACHE", str(ROOT / "runtime" / "cache" / "camoufox"))).expanduser().resolve()
         cache.mkdir(parents=True, exist_ok=True)

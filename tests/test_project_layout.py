@@ -333,6 +333,7 @@ class ProjectLayoutTests(unittest.TestCase):
         self.assertIn("--dry-run", installer)
         self.assertIn("BUN_INSTALL", installer)
         self.assertIn("--full-sources", installer)
+        self.assertIn('"--filter", "opencode"', installer)
 
     def test_runtime_source_profile_excludes_development_payloads(self) -> None:
         sys.path.insert(0, str(ROOT / "scripts"))
