@@ -3,12 +3,12 @@
 # The launcher persists only provider/model/base_url to the active Hermes
 # config.yaml and passes api_key to the child process ephemerally.
 
-provider: openrouter
-model: anthropic/claude-sonnet-4
+provider: opencode-free
+model: laguna-s-2.1-free
 api_key: ""
-base_url: "https://openrouter.ai/api/v1"
+base_url: "https://opencode.ai/zen/v1"
 
 # Optional auxiliary model for screenshots/images when the main model is text-only.
 vision:
-  provider: openrouter
-  model: google/gemini-2.5-flash
+  provider: opencode-free
+  model: laguna-s-2.1-free

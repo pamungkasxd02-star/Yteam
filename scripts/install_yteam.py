@@ -104,8 +104,9 @@ def ensure_uv() -> str:
     raise RuntimeError("uv was installed but is not on PATH; add its user bin directory and run the installer again.")
 
 
-def bootstrap_sources() -> None:
-    run_command([sys.executable, str(ROOT / "scripts" / "bootstrap_sources.py")], cwd=ROOT)
+def bootstrap_sources(full_sources: bool) -> None:
+    profile = "full" if full_sources else "runtime"
+    run_command([sys.executable, str(ROOT / "scripts" / "bootstrap_sources.py"), "--profile", profile], cwd=ROOT)
 
 
 def install_dependencies(uv: str, bun: str, fetch_browser: bool) -> None:
@@ -129,9 +130,10 @@ def setup(args: argparse.Namespace) -> Path:
         raise RuntimeError(f"not a YTEAM checkout: {ROOT}")
     if args.dry_run:
         print(f"YTEAM root: {ROOT}")
-        print("Would bootstrap upstream sources, install Hermes, install Bun/OpenCode dependencies, and install the launcher.")
+        profile = "full" if args.full_sources else "runtime"
+        print(f"Would bootstrap the {profile} upstream source profile, install Hermes, install Bun/OpenCode dependencies, and install the launcher.")
         return (args.bin_dir or default_bin()).resolve() / ("yteam.cmd" if os.name == "nt" else "yteam")
-    bootstrap_sources()
+    bootstrap_sources(args.full_sources)
     uv = ensure_uv()
     bun = find_bun() or install_bun()
     install_dependencies(uv, bun, not args.skip_browser_download)
@@ -145,6 +147,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bin-dir", type=Path, help="User-local bin directory")
     parser.add_argument("--skip-browser-download", action="store_true", help="Install Camoufox package but do not download its browser")
+    parser.add_argument("--full-sources", action="store_true", help="Fetch all upstream source, tests, and docs (developer/CI mode)")
     parser.add_argument("--dry-run", action="store_true", help="Show setup plan without downloading or modifying anything")
     args = parser.parse_args()
     try:

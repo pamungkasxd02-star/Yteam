@@ -37,7 +37,7 @@ def run() -> dict[str, object]:
     checks.append(check("tui-overlay", (ROOT / ".opencode" / "plugins" / "yteam-tui.tsx").exists(), ".opencode/plugins/yteam-tui.tsx"))
     checks.append(check("github-ci", (ROOT / ".github" / "workflows" / "ci.yml").exists(), ".github/workflows/ci.yml"))
     model_config = next((path for path in (ROOT / "yteam.local.yaml", ROOT / "runtime" / "yteam-model.yaml", ROOT / "runtime" / "yteam-model.local.yaml") if path.exists()), None)
-    checks.append(check("model-config", model_config is not None, "yteam.local.yaml (copy yteam.local.example.yaml)", required=False))
+    checks.append(check("model-config", True, str(model_config.relative_to(ROOT)) if model_config else "automatic OpenCode Zen Free default (keyless)", required=False))
     usage = shutil.disk_usage(ROOT.anchor or ROOT)
     checks.append(check("disk", usage.free >= 1_000_000_000, f"{usage.free // (1024 ** 3)} GiB free", required=False))
     required_failed = [item["name"] for item in checks if item["required"] and not item["ok"]]

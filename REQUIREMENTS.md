@@ -10,7 +10,7 @@ Read this file before running the installer.
 | Python | 3.11–3.13 | Run YTEAM and Hermes |
 | PowerShell or POSIX shell | Current | Run the installer |
 | Internet | HTTPS | Download sources/dependencies and call the model provider |
-| Model API key | Provider-specific | Run the AI agent |
+| Model API key | Not required for automatic OpenCode Zen Free; provider-specific for overrides | Run the AI agent |
 
 The TUI also requires Bun. The installer installs Bun automatically when it is
 not already available.
@@ -24,7 +24,7 @@ not already available.
 
 ## Installed automatically
 
-`python scripts/install_yteam.py` installs or prepares:
+`python scripts/install_yteam.py` installs or prepares a sparse runtime tree:
 
 - OpenCode under `vendor/opencode`;
 - Hermes Agent under `vendor/hermes-agent`;
@@ -33,6 +33,14 @@ not already available.
 - OpenCode JavaScript dependencies with `bun install`;
 - Camoufox and its browser runtime;
 - the user-local `yteam` launcher.
+
+The default runtime profile excludes upstream tests, documentation, website,
+desktop/web products, benchmarks, and the full Cybermes knowledge corpus. CI or
+contributors who need those files can use:
+
+```text
+python scripts/install_yteam.py --full-sources
+```
 
 Dependency files are kept at the repository root:
 
@@ -59,7 +67,25 @@ the browser binary download with:
 python scripts/install_yteam.py --skip-browser-download
 ```
 
-## Model configuration
+## Model
+
+No model setup is required after installation. YTEAM automatically detects the
+current OpenCode Zen Free catalog and starts with the upstream Hermes
+`opencode-free` provider through the keyless free tier. It deliberately does
+not use `opencode-go`:
+
+```text
+provider: opencode-free
+model: laguna-s-2.1-free
+endpoint: https://opencode.ai/zen/v1
+```
+
+The native OpenCode `/models` picker receives the detected free choices, such as
+`big-pickle`, `mimo-v2.5-free`, and `laguna-s-2.1-free`. If the Zen catalog is
+temporarily unavailable at startup, the launcher uses a bundled fallback list.
+No API key is needed for this provider.
+
+The local file below is optional and is only needed to override that default.
 
 Create the local configuration file:
 
@@ -76,15 +102,17 @@ yteam.local.example.yaml
 Example:
 
 ```yaml
-provider: openrouter
-model: anthropic/claude-sonnet-4
-api_key: "your-api-key"
-base_url: "https://openrouter.ai/api/v1"
+provider: opencode-free
+model: laguna-s-2.1-free
+api_key: ""
+base_url: "https://opencode.ai/zen/v1"
 ```
 
 This file is ignored by Git. Never publish it. The API key is passed to the
 Hermes child process at runtime and is not stored in the generated routing
-config.
+config. `opencode-free` is the keyless OpenCode Zen free tier. For paid Zen or
+another provider, replace the provider/model/base URL and add that provider's
+API key. The free default needs no account or API key.
 
 ## Disk
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import signal
 import subprocess
@@ -25,6 +26,23 @@ HERMES_ROOT = ROOT / "vendor" / "hermes-agent"
 OPENCODE_ROOT = ROOT / "vendor" / "opencode"
 RUNTIME = ROOT / "runtime"
 MODEL_CONFIGS = (ROOT / "yteam.local.yaml", RUNTIME / "yteam-model.yaml", RUNTIME / "yteam-model.local.yaml")
+DEFAULT_MODEL_CONFIG: dict[str, str] = {
+    "provider": "opencode-free",
+    "model": "laguna-s-2.1-free",
+    "api_key": "",
+    "base_url": "https://opencode.ai/zen/v1",
+}
+FREE_MODELS_URL = "https://opencode.ai/zen/v1/models"
+FREE_MODEL_FALLBACK = (
+    "big-pickle",
+    "deepseek-v4-flash-free",
+    "muse-spark-1.2-contributor-free",
+    "mimo-v2.5-free",
+    "ling-3.0-flash-fin-free",
+    "nemotron-3-ultra-free",
+    "nemotron-3.5-lightning-free",
+    "laguna-s-2.1-free",
+)
 PORT = os.environ.get("HERMES_BRIDGE_PORT", "8642")
 HOST = "127.0.0.1"
 NATIVE_COMMANDS = {
@@ -75,12 +93,12 @@ def wait_for_health(url: str, key: str, process: subprocess.Popen[bytes], timeou
 
 
 def load_model_config(path: Path | None = None) -> dict[str, str]:
-    """Load the one-file local model config without returning it to stdout."""
+    """Load an optional override, defaulting to OpenCode Zen Free automatically."""
     selected = path
     if selected is None:
         selected = next((candidate for candidate in MODEL_CONFIGS if candidate.exists()), None)
     if selected is None:
-        return {}
+        return dict(DEFAULT_MODEL_CONFIG)
     if yaml is None:
         raise RuntimeError("PyYAML is required to read yteam.local.yaml; install Hermes dependencies first.")
     try:
@@ -96,16 +114,94 @@ def load_model_config(path: Path | None = None) -> dict[str, str]:
             result[key] = str(value).strip()
     if not result.get("provider") or not result.get("model"):
         raise RuntimeError("yteam.local.yaml requires non-empty provider and model fields.")
-    if not result.get("api_key"):
+    if not result.get("api_key") and result.get("provider", "").strip().lower() not in {"opencode-free", "opencode_free"}:
         raise RuntimeError("yteam.local.yaml requires a local api_key value.")
     return result
+
+
+def discover_free_models(timeout: float = 7.0) -> list[str]:
+    """Discover OpenCode Zen Free models, never the paid Go catalog."""
+    request = urllib.request.Request(
+        FREE_MODELS_URL,
+        headers={"Accept": "application/json", "User-Agent": "YTEAM/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        entries = payload.get("data", []) if isinstance(payload, dict) else []
+        discovered = {
+            str(entry.get("id", "")).strip()
+            for entry in entries
+            if isinstance(entry, dict) and str(entry.get("id", "")).strip()
+        }
+        models = [
+            model for model in discovered
+            if model == "big-pickle" or model.endswith("-free")
+        ]
+        if models:
+            return sorted(models)
+    except (OSError, ValueError, TypeError, urllib.error.URLError):
+        pass
+    return list(FREE_MODEL_FALLBACK)
+
+
+def build_opencode_config_content(
+    free_models: list[str],
+    *,
+    default_model: str = DEFAULT_MODEL_CONFIG["model"],
+) -> str:
+    """Build an in-memory OpenCode overlay for the native model picker."""
+    models = {
+        "yteam-agent": {
+            "name": "YTEAM",
+            "attachment": True,
+            "tool_call": False,
+            "reasoning": True,
+            "modalities": {"input": ["text", "image", "pdf"], "output": ["text"]},
+        }
+    }
+    for model in free_models:
+        models[model] = {
+            "name": f"OpenCode Free · {model}",
+            "attachment": False,
+            "tool_call": True,
+            "reasoning": True,
+            "modalities": {"input": ["text"], "output": ["text"]},
+        }
+    selected = default_model if default_model in free_models else "yteam-agent"
+    if selected == "yteam-agent" and default_model != "yteam-agent" and free_models:
+        selected = "laguna-s-2.1-free" if "laguna-s-2.1-free" in free_models else free_models[0]
+    return json.dumps(
+        {
+            "model": f"yteam/{selected}",
+            "small_model": f"yteam/{selected}",
+            "provider": {
+                "yteam": {
+                    "models": models,
+                }
+            },
+        }
+    )
+
+
+def apply_opencode_catalog_overlay(env: dict[str, str], config: dict[str, str], free_models: list[str]) -> None:
+    """Expose the same free catalog to native OpenCode commands and the TUI."""
+    env["OPENCODE_CONFIG_CONTENT"] = build_opencode_config_content(
+        free_models,
+        default_model=config["model"] if config["provider"].strip().lower() in {"opencode-free", "opencode_free"} else "yteam-agent",
+    )
 
 
 def apply_model_config(env: dict[str, str], config: dict[str, str]) -> None:
     """Map the convenience file to Hermes-compatible child-process settings."""
     provider = config["provider"].strip().lower()
     env["HERMES_MODEL"] = config["model"]
-    if provider == "openrouter":
+    if provider in {"opencode-free", "opencode_free"}:
+        env["HERMES_MODEL_PROVIDER"] = "opencode-free"
+        env["OPENCODE_ZEN_API_KEY"] = ""
+        env["OPENAI_API_KEY"] = ""
+        env["OPENROUTER_API_KEY"] = ""
+    elif provider == "openrouter":
         env["OPENROUTER_API_KEY"] = config["api_key"]
     elif provider == "anthropic":
         env["ANTHROPIC_API_KEY"] = config["api_key"]
@@ -113,7 +209,7 @@ def apply_model_config(env: dict[str, str], config: dict[str, str]) -> None:
         env["OPENAI_API_KEY"] = config["api_key"]
 
 
-def apply_model_profile(home: Path, config: dict[str, str]) -> None:
+def apply_model_profile(home: Path, config: dict[str, str], free_models: list[str] | None = None) -> None:
     """Persist only non-secret model routing in the active Hermes config."""
     if yaml is None:
         raise RuntimeError("PyYAML is required to update the active Hermes model profile.")
@@ -130,6 +226,21 @@ def apply_model_profile(home: Path, config: dict[str, str]) -> None:
     if config.get("base_url"):
         model["base_url"] = config["base_url"]
     data["model"] = model
+    if config.get("provider", "").strip().lower() in {"opencode-free", "opencode_free"}:
+        gateway = data.setdefault("gateway", {})
+        platforms = gateway.setdefault("platforms", {})
+        api_server = platforms.setdefault("api_server", {})
+        extra = api_server.setdefault("extra", {})
+        extra["direct_model_requests"] = True
+        discovered_models = free_models if free_models is not None else discover_free_models()
+        extra["model_routes"] = {
+            free_model: {
+                "model": free_model,
+                "provider": "opencode-free",
+                "base_url": config.get("base_url", DEFAULT_MODEL_CONFIG["base_url"]),
+            }
+            for free_model in discovered_models
+        }
     # Never copy api_key into a persisted config file.
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 
@@ -144,12 +255,17 @@ def main() -> int:
     requested = sys.argv[1:]
     first = requested[0] if requested else ""
     if first in NATIVE_COMMANDS or first in {"-h", "--help", "-v", "--version", "completion"}:
-        return subprocess.run([bun, "run", "--conditions=browser", opencode_entry, *requested], cwd=ROOT, env=os.environ.copy()).returncode
+        native_env = os.environ.copy()
+        if first == "models":
+            native_config = load_model_config()
+            apply_opencode_catalog_overlay(native_env, native_config, discover_free_models())
+        return subprocess.run([bun, "run", "--conditions=browser", opencode_entry, *requested], cwd=ROOT, env=native_env).returncode
 
     from init_yteam import initialize
 
     hermes_home = initialize()
     model_config = load_model_config()
+    free_models = discover_free_models()
     key = token_urlsafe(32)
     env = os.environ.copy()
     env.update(
@@ -167,8 +283,9 @@ def main() -> int:
         }
     )
     if model_config:
-        apply_model_profile(hermes_home, model_config)
+        apply_model_profile(hermes_home, model_config, free_models)
         apply_model_config(env, model_config)
+    apply_opencode_catalog_overlay(env, model_config, free_models)
     log_path = RUNTIME / "hermes-gateway.log"
     log_handle = log_path.open("ab")
     gateway = subprocess.Popen(

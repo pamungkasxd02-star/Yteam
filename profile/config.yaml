@@ -27,3 +27,10 @@ curator:
   enabled: true
   consolidate: true
   prune_builtins: false
+gateway:
+  platforms:
+    api_server:
+      extra:
+        # Native OpenCode model selections arrive as a bare model id. The
+        # bridge resolves those ids against the active opencode-free provider.
+        direct_model_requests: true

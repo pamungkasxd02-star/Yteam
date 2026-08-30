@@ -25,7 +25,9 @@ python scripts\install_yteam.py
 
 The installer automatically:
 
-1. downloads the pinned upstream OpenCode, Hermes Agent, and Cybermes sources;
+1. downloads only the pinned runtime source needed by OpenCode, Hermes Agent,
+   and Cybermes; tests, docs, website, desktop, and full knowledge corpora are
+   not fetched by default;
 2. creates `vendor\hermes-agent\.venv`;
 3. installs Hermes dependencies;
 4. installs the single root `requirements.txt` dependencies;
@@ -35,6 +37,15 @@ The installer automatically:
 8. installs the `yteam` launcher in the user bin directory.
 
 Open a new terminal after the installer prints the PATH command.
+
+Contributor/CI mode is available when the complete upstream source tree is
+needed:
+
+```powershell
+python scripts\install_yteam.py --full-sources
+```
+
+Normal users should keep the default lean runtime profile.
 
 ### macOS/Linux
 
@@ -66,9 +77,35 @@ Dependency files:
 requirements.txt          # all direct YTEAM Python dependencies, including Camoufox
 ```
 
-## Configure the model
+## Model
 
-Copy the local-only template:
+YTEAM starts with **OpenCode Zen Free automatically**. No account, API key, or
+local model file is required. The launcher detects the current free-model list
+from OpenCode Zen and exposes it through the native OpenCode `/models` picker.
+It uses the upstream Hermes `opencode-free` provider—not `opencode-go`—with a
+safe default model:
+
+```text
+provider: opencode-free
+model: laguna-s-2.1-free
+endpoint: https://opencode.ai/zen/v1
+```
+
+The free choices include models such as `big-pickle`, `mimo-v2.5-free`,
+`deepseek-v4-flash-free`, and `laguna-s-2.1-free` when advertised by Zen. Use
+`/models` in the TUI to switch them. If Zen's catalog is temporarily
+unreachable, YTEAM uses a bundled free-model fallback list.
+
+Start immediately after installation:
+
+```text
+yteam
+```
+
+### Optional model override
+
+Only copy the local-only template if you want to override the free default or
+use a paid/other provider:
 
 ```powershell
 Copy-Item .\yteam.local.example.yaml .\yteam.local.yaml
@@ -78,18 +115,23 @@ notepad .\yteam.local.yaml
 Set the provider, model, key, and endpoint:
 
 ```yaml
-provider: openrouter
-model: anthropic/claude-sonnet-4
-api_key: "your-api-key"
-base_url: "https://openrouter.ai/api/v1"
+provider: opencode-free
+model: laguna-s-2.1-free
+api_key: ""
+base_url: "https://opencode.ai/zen/v1"
 ```
 
 `yteam.local.yaml` is ignored by Git. The launcher writes only non-secret model
-routing to the active Hermes profile and passes the API key to Hermes at
-runtime. Do not commit the local file.
+routing to the active Hermes profile and passes a paid-provider API key to
+Hermes at runtime. The free provider remains keyless. Do not commit the local
+file.
 
 The model name shown in the TUI is **YTEAM**. The internal OpenCode model ID is
-`yteam/yteam-agent`; the actual provider/model comes from `yteam.local.yaml`.
+`yteam/yteam-agent`; the launcher maps the selected free model to Hermes
+`opencode-free` automatically. If `yteam.local.yaml` exists, its provider/model
+values override the default.
+If you choose OpenRouter, paid Zen, or another provider, put its API key in the
+same `api_key` field. The free default does not require this file or a key.
 
 ## Run
 

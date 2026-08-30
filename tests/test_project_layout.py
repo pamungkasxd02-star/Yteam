@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -326,11 +327,29 @@ class ProjectLayoutTests(unittest.TestCase):
 
     def test_installer_has_one_command_setup_and_optional_camoufox_switches(self) -> None:
         installer = (ROOT / "scripts" / "install_yteam.py").read_text(encoding="utf-8")
-        self.assertIn("bootstrap_sources()", installer)
+        self.assertIn("bootstrap_sources(args.full_sources)", installer)
         self.assertIn("install_dependencies", installer)
         self.assertIn("--skip-browser-download", installer)
         self.assertIn("--dry-run", installer)
         self.assertIn("BUN_INSTALL", installer)
+        self.assertIn("--full-sources", installer)
+
+    def test_runtime_source_profile_excludes_development_payloads(self) -> None:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            from bootstrap_sources import sparse_patterns
+
+            profiles = [sparse_patterns(name, "runtime") for name in ("hermes-agent", "opencode", "cybermes")]
+        finally:
+            sys.path.remove(str(ROOT / "scripts"))
+        self.assertIn("agent/**", profiles[0])
+        self.assertIn("packages/opencode/**", profiles[1])
+        self.assertIn("cmd/**", profiles[2])
+        for patterns in profiles:
+            self.assertIn("!**/tests/**", patterns)
+            self.assertIn("!**/docs/**", patterns)
+            self.assertIn("!**/examples/**", patterns)
+        self.assertEqual(sparse_patterns("opencode", "full"), [])
 
     def test_direct_cybermes_wrapper_has_no_protocol_server_dependency(self) -> None:
         wrapper = (ROOT / "scripts" / "cybermes.py").read_text(encoding="utf-8")
@@ -615,6 +634,7 @@ class ProjectLayoutTests(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("contents: read", workflow)
         self.assertIn("bootstrap_sources.py", workflow)
+        self.assertIn("--profile full", workflow)
         self.assertNotIn("<account>", workflow)
         self.assertNotIn("<repository>", workflow)
 
@@ -719,7 +739,14 @@ class ProjectLayoutTests(unittest.TestCase):
         self.assertIn("yteam.local.yaml", ignore)
         sys.path.insert(0, str(ROOT / "scripts"))
         try:
-            from hermes_opencode import apply_model_config, apply_model_profile, load_model_config
+            from hermes_opencode import (
+                DEFAULT_MODEL_CONFIG,
+                apply_model_config,
+                apply_model_profile,
+                apply_opencode_catalog_overlay,
+                build_opencode_config_content,
+                load_model_config,
+            )
         finally:
             sys.path.remove(str(ROOT / "scripts"))
         env = {}
@@ -740,6 +767,37 @@ class ProjectLayoutTests(unittest.TestCase):
             self.assertIn("default: anthropic/test", persisted)
             self.assertIn("base_url: https://openrouter.ai/api/v1", persisted)
             self.assertNotIn("local-secret", persisted)
+        with tempfile.TemporaryDirectory() as directory:
+            config_path = Path(directory) / "free.yaml"
+            config_path.write_text("provider: opencode-free\nmodel: laguna-s-2.1-free\napi_key: \"\"\nbase_url: https://opencode.ai/zen/v1\n", encoding="utf-8")
+            free_config = load_model_config(config_path)
+            self.assertEqual(free_config["provider"], "opencode-free")
+            self.assertEqual(free_config["api_key"], "")
+            free_env: dict[str, str] = {}
+            apply_model_config(free_env, free_config)
+            self.assertEqual(free_env["HERMES_MODEL"], "laguna-s-2.1-free")
+            self.assertEqual(free_env["HERMES_MODEL_PROVIDER"], "opencode-free")
+            self.assertEqual(free_env["OPENCODE_ZEN_API_KEY"], "")
+            catalog_env: dict[str, str] = {}
+            apply_opencode_catalog_overlay(catalog_env, free_config, ["big-pickle", "mimo-v2.5-free"])
+            self.assertIn("OPENCODE_CONFIG_CONTENT", catalog_env)
+            self.assertIn("yteam/big-pickle", catalog_env["OPENCODE_CONFIG_CONTENT"])
+            overlay = json.loads(build_opencode_config_content(["big-pickle", "mimo-v2.5-free"], default_model="mimo-v2.5-free"))
+            self.assertEqual(overlay["model"], "yteam/mimo-v2.5-free")
+            self.assertIn("big-pickle", overlay["provider"]["yteam"]["models"])
+            self.assertIn("mimo-v2.5-free", overlay["provider"]["yteam"]["models"])
+            self.assertNotIn("opencode-go", json.dumps(overlay))
+            with patch("hermes_opencode.discover_free_models", return_value=["big-pickle", "mimo-v2.5-free"]):
+                home = Path(directory) / "free-home"
+                home.mkdir()
+                (home / "config.yaml").write_text("model:\n  default: old\n", encoding="utf-8")
+                apply_model_profile(home, free_config, ["big-pickle", "mimo-v2.5-free"])
+                persisted_free = (home / "config.yaml").read_text(encoding="utf-8")
+                self.assertIn("direct_model_requests: true", persisted_free)
+                self.assertIn("big-pickle", persisted_free)
+                self.assertIn("provider: opencode-free", persisted_free)
+        with patch("hermes_opencode.MODEL_CONFIGS", (Path(directory) / "missing.yaml",)):
+            self.assertEqual(load_model_config(), DEFAULT_MODEL_CONFIG)
 
     def test_toolchain_reports_camoufox_as_optional_browser_dependency(self) -> None:
         sys.path.insert(0, str(ROOT / "scripts"))
