@@ -1,0 +1,88 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "yteam/yteam-agent",
+  "small_model": "yteam/yteam-agent",
+  "default_agent": "yteam-security",
+  "share": "disabled",
+  "autoupdate": "notify",
+  "snapshot": true,
+  "instructions": ["YTEAM_SECURITY.md"],
+  "plugin": ["./.opencode/plugins/yteam-tui.tsx"],
+  "skills": {
+    "paths": [
+      ".opencode/skills",
+      "../.agents/skills",
+      "../.opencode/skills",
+      "vendor/hermes-agent/skills",
+      "vendor/hermes-agent/optional-skills/security",
+      "vendor/cybermes/skills"
+    ]
+  },
+  "references": {
+    "hermes-source": {
+      "path": "vendor/hermes-agent",
+      "description": "Upstream Hermes Agent source, protocols, tools, TUI gateway, and platform behavior."
+    },
+    "opencode-source": {
+      "path": "vendor/opencode",
+      "description": "Upstream OpenCode source, TUI, SDK, server, and configuration behavior."
+    },
+    "cybermes-source": {
+      "path": "vendor/cybermes",
+      "description": "Upstream Cybermes MCP tools, Go engine, skills, reports, and security knowledge adapters."
+    },
+    "security-workspace": {
+      "path": "..",
+      "description": "Authorized security workspace containing scopes, packs, evidence, memories, and security skills."
+    }
+  },
+  "provider": {
+    "yteam": {
+      "name": "YTEAM Agent Bridge",
+      "api": "http://127.0.0.1:8642/v1",
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "apiKey": "{env:YTEAM_BRIDGE_KEY}"
+      },
+      "models": {
+        "yteam-agent": {
+          "name": "YTEAM",
+          "attachment": true,
+          "tool_call": false,
+          "reasoning": true,
+          "modalities": {
+            "input": ["text", "image", "pdf"],
+            "output": ["text"]
+          }
+        }
+      }
+    }
+  },
+  "agent": {
+    "yteam-security": {
+      "mode": "primary",
+      "model": "yteam/yteam-agent",
+      "description": "Authorized security, bug-bounty, QA, triage, evidence, and reporting workflow.",
+      "steps": 200,
+      "prompt": "Use YTEAM_SECURITY.md as the operating contract. Yteam is the security execution backend; OpenCode is only the presentation UI. Load the narrowest matching security skills, preserve prompt-cache stability, and require live evidence before declaring a finding.",
+      "permission": {
+        "bash": "deny",
+        "edit": "deny",
+        "read": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "task": "deny",
+        "external_directory": "deny"
+      }
+    }
+  },
+  "permission": {
+    "bash": "deny",
+    "edit": "deny",
+    "read": "deny",
+    "glob": "deny",
+    "grep": "deny",
+    "task": "deny",
+    "external_directory": "deny"
+  }
+}

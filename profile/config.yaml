@@ -1,0 +1,29 @@
+# Yteam profile defaults. API keys and tokens belong in this profile's .env.
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+  write_approval: false
+  nudge_interval: 10
+agent:
+  image_input_mode: auto
+skills:
+  external_dirs:
+    - "${YTEAM_PROJECT_ROOT}/.opencode/skills"
+    - "${YTEAM_WORKSPACE_ROOT}/.agents/skills"
+    - "${YTEAM_WORKSPACE_ROOT}/.opencode/skills"
+    - "${YTEAM_PROJECT_ROOT}/vendor/hermes-agent/skills"
+    - "${YTEAM_PROJECT_ROOT}/vendor/hermes-agent/optional-skills/security"
+    - "${YTEAM_PROJECT_ROOT}/vendor/cybermes/skills"
+  project_discovery: true
+  template_vars: true
+  inline_shell: false
+auxiliary:
+  vision:
+    provider: auto
+    model: ""
+  background_review:
+    enabled: true
+curator:
+  enabled: true
+  consolidate: true
+  prune_builtins: false
