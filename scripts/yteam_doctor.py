@@ -22,26 +22,21 @@ def check(name: str, ok: bool, detail: str, required: bool = True) -> dict[str, 
 def run() -> dict[str, object]:
     checks: list[dict[str, object]] = []
     checks.append(check("python", sys.version_info >= (3, 11) and sys.version_info < (3, 14), sys.version.split()[0]))
-    checks.append(check("opencode-source", (ROOT / "vendor" / "opencode" / "packages" / "opencode" / "src" / "index.ts").exists(), "vendor/opencode/packages/opencode/src/index.ts"))
-    checks.append(check("hermes-source", (ROOT / "vendor" / "hermes-agent" / "hermes").exists(), "vendor/hermes-agent/hermes"))
-    checks.append(check("cybermes-source", (ROOT / "vendor" / "cybermes" / "go.mod").exists(), "vendor/cybermes/go.mod"))
-    bun = shutil.which("bun") or os.environ.get("BUN_BIN", "")
-    checks.append(check("bun", bool(bun), bun or "not found"))
-    go = shutil.which("go")
-    checks.append(check("go", bool(go), go or "not found", required=False))
+    checks.append(check("native-tui", (ROOT / "scripts" / "yteam_tui.py").exists(), "scripts/yteam_tui.py"))
+    checks.append(check("native-runtime", (ROOT / "scripts" / "yteam_runtime.py").exists(), "scripts/yteam_runtime.py"))
+    checks.append(check("native-tools", (ROOT / "scripts" / "yteam_native_tools.py").exists(), "scripts/yteam_native_tools.py"))
     uv = shutil.which("uv")
-    checks.append(check("uv", bool(uv), uv or "not found"))
+    checks.append(check("uv", bool(uv), uv or "not found; installer can bootstrap it", required=False))
     camoufox = importlib.util.find_spec("camoufox") is not None
     checks.append(check("camoufox", camoufox, "installed" if camoufox else "not installed; native Botterdop remains available", required=False))
-    checks.append(check("config", (ROOT / "opencode.json").exists() and (ROOT / "YTEAM_SECURITY.md").exists(), "opencode.json + YTEAM_SECURITY.md"))
-    checks.append(check("tui-overlay", (ROOT / ".opencode" / "plugins" / "yteam-tui.tsx").exists(), ".opencode/plugins/yteam-tui.tsx"))
+    checks.append(check("config", (ROOT / "YTEAM_SECURITY.md").exists(), "YTEAM_SECURITY.md"))
     checks.append(check("github-ci", (ROOT / ".github" / "workflows" / "ci.yml").exists(), ".github/workflows/ci.yml"))
     model_config = next((path for path in (ROOT / "yteam.local.yaml", ROOT / "runtime" / "yteam-model.yaml", ROOT / "runtime" / "yteam-model.local.yaml") if path.exists()), None)
-    checks.append(check("model-config", True, str(model_config.relative_to(ROOT)) if model_config else "automatic OpenCode Zen Free default (keyless)", required=False))
+    checks.append(check("model-config", True, str(model_config.relative_to(ROOT)) if model_config else "automatic Zen Free default (keyless)", required=False))
     usage = shutil.disk_usage(ROOT.anchor or ROOT)
     checks.append(check("disk", usage.free >= 1_000_000_000, f"{usage.free // (1024 ** 3)} GiB free", required=False))
     required_failed = [item["name"] for item in checks if item["required"] and not item["ok"]]
-    return {"schema_version": 1, "product": "YTEAM", "root": str(ROOT), "ready": not required_failed, "required_failures": required_failed, "checks": checks, "next": "Install missing required dependencies; Camoufox and Go are optional."}
+    return {"schema_version": 2, "product": "YTEAM", "root": str(ROOT), "ready": not required_failed, "required_failures": required_failed, "checks": checks, "next": "Install requirements.txt when optional PyYAML or Camoufox features are needed; the native runtime has no vendored-source requirement."}
 
 
 def main() -> int:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and query the complete Yteam/Cybermes skill registry and bundles."""
+"""Build and query the native YTEAM skill registry and bundles."""
 
 from __future__ import annotations
 
@@ -12,12 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = (
-    ROOT / ".opencode" / "skills",
-    ROOT / ".." / ".agents" / "skills",
-    ROOT / ".." / ".opencode" / "skills",
-    ROOT / "vendor" / "hermes-agent" / "skills",
-    ROOT / "vendor" / "hermes-agent" / "optional-skills" / "security",
-    ROOT / "vendor" / "cybermes" / "skills",
+    ROOT / "skills",
 )
 KEYWORDS = {
     "recon": ("recon", "scope", "subdomain", "api", "web2", "enumeration", "osint", "source"),
@@ -77,7 +72,7 @@ def select_bundle(items: list[dict[str, object]], signals: list[str], limit: int
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("index", "bundle"))
-    parser.add_argument("--output", type=Path, default=ROOT / "runtime" / "cybermes-skill-registry.json")
+    parser.add_argument("--output", type=Path, default=ROOT / "runtime" / "yteam-skill-registry.json")
     parser.add_argument("--signals", nargs="*", default=[])
     parser.add_argument("--limit", type=int, default=18)
     args = parser.parse_args()

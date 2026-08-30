@@ -1,4 +1,4 @@
 @echo off
 setlocal
-python "%~dp0scripts\hermes_opencode.py" %*
+python "%~dp0scripts\yteam_tui.py" %*
 exit /b %ERRORLEVEL%

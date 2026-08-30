@@ -1,4 +1,4 @@
-# Yteam profile defaults. API keys and tokens belong in this profile's .env.
+# YTEAM profile defaults. API keys and tokens belong in a local ignored config.
 memory:
   memory_enabled: true
   user_profile_enabled: true
@@ -8,12 +8,7 @@ agent:
   image_input_mode: auto
 skills:
   external_dirs:
-    - "${YTEAM_PROJECT_ROOT}/.opencode/skills"
-    - "${YTEAM_WORKSPACE_ROOT}/.agents/skills"
-    - "${YTEAM_WORKSPACE_ROOT}/.opencode/skills"
-    - "${YTEAM_PROJECT_ROOT}/vendor/hermes-agent/skills"
-    - "${YTEAM_PROJECT_ROOT}/vendor/hermes-agent/optional-skills/security"
-    - "${YTEAM_PROJECT_ROOT}/vendor/cybermes/skills"
+    - "${YTEAM_PROJECT_ROOT}/skills"
   project_discovery: true
   template_vars: true
   inline_shell: false
@@ -27,10 +22,8 @@ curator:
   enabled: true
   consolidate: true
   prune_builtins: false
-gateway:
-  platforms:
-    api_server:
-      extra:
-        # Native OpenCode model selections arrive as a bare model id. The
-        # bridge resolves those ids against the active opencode-free provider.
-        direct_model_requests: true
+runtime:
+  mode: standalone
+  direct_model_requests: true
+  read_only: true
+  no_auto_submit: true

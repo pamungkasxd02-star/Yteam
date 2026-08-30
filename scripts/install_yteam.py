@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Install YTEAM dependencies and the user-local launcher.
-
-The installer owns only this repository's vendor checkouts, Python environment,
-optional browser cache, and user-local launcher. It never modifies a global
-OpenCode installation.
-"""
+"""Install the standalone YTEAM runtime and the user-local launcher."""
 
 from __future__ import annotations
 
@@ -18,9 +13,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-HERMES_ROOT = ROOT / "vendor" / "hermes-agent"
-OPENCODE_ROOT = ROOT / "vendor" / "opencode"
-VENV = HERMES_ROOT / ".venv"
+VENV = ROOT / "runtime" / ".venv"
 
 
 def default_bin() -> Path:
@@ -34,8 +27,8 @@ def default_bin() -> Path:
 
 def launcher_text(target: Path) -> str:
     if os.name == "nt":
-        return f'@echo off\npython "{target / "scripts" / "hermes_opencode.py"}" %*\n'
-    return f'#!/usr/bin/env sh\nset -eu\nexec python3 "{target / "scripts" / "hermes_opencode.py"}" "$@"\n'
+        return f'@echo off\npython "{target / "scripts" / "yteam_tui.py"}" %*\n'
+    return f'#!/usr/bin/env sh\nset -eu\nexec python3 "{target / "scripts" / "yteam_tui.py"}" "$@"\n'
 
 
 def install(destination: Path) -> Path:
@@ -59,32 +52,6 @@ def python_in_venv() -> Path:
     return VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
-def find_bun() -> str | None:
-    configured = os.environ.get("BUN_BIN")
-    if configured and Path(configured).exists():
-        return configured
-    return shutil.which("bun")
-
-
-def install_bun() -> str:
-    existing = find_bun()
-    if existing:
-        return existing
-    install_dir = Path(os.environ.get("BUN_INSTALL", str(ROOT / "runtime" / "bun"))).expanduser().resolve()
-    env = os.environ.copy()
-    env["BUN_INSTALL"] = str(install_dir)
-    if os.name == "nt":
-        run_command(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://bun.sh/install.ps1 | iex"], env=env)
-        candidates = [install_dir / "bin" / "bun.exe", Path.home() / ".bun" / "bin" / "bun.exe"]
-    else:
-        run_command(["sh", "-c", "curl -fsSL https://bun.sh/install | bash"], env=env)
-        candidates = [install_dir / "bin" / "bun", Path.home() / ".bun" / "bin" / "bun"]
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
-    raise RuntimeError("Bun installation finished but the executable was not found; set BUN_BIN manually.")
-
-
 def find_uv() -> str | None:
     return shutil.which("uv")
 
@@ -104,23 +71,10 @@ def ensure_uv() -> str:
     raise RuntimeError("uv was installed but is not on PATH; add its user bin directory and run the installer again.")
 
 
-def bootstrap_sources(full_sources: bool) -> None:
-    profile = "full" if full_sources else "runtime"
-    run_command([sys.executable, str(ROOT / "scripts" / "bootstrap_sources.py"), "--profile", profile], cwd=ROOT)
-
-
-def install_dependencies(uv: str, bun: str, fetch_browser: bool) -> None:
+def install_dependencies(uv: str, fetch_browser: bool) -> None:
     if not python_in_venv().exists():
-        run_command([uv, "venv", "--python", "3.11", str(VENV)], cwd=HERMES_ROOT)
-    run_command([uv, "pip", "install", "--python", str(python_in_venv()), "-e", ".[all]"], cwd=HERMES_ROOT)
+        run_command([uv, "venv", "--python", "3.11", str(VENV)], cwd=ROOT)
     run_command([uv, "pip", "install", "--python", str(python_in_venv()), "-r", str(ROOT / "requirements.txt")], cwd=ROOT)
-    bun_env = os.environ.copy()
-    bun_env["PATH"] = str(Path(bun).resolve().parent) + os.pathsep + bun_env.get("PATH", "")
-    # Install only the OpenCode TUI workspace and its runtime workspace
-    # dependencies. A root-wide install also resolves unrelated console/stats
-    # packages (including ephemeral pkg.pr.new previews) that are not shipped
-    # by YTEAM's sparse runtime profile.
-    run_command([bun, "install", "--frozen-lockfile", "--filter", "opencode"], cwd=OPENCODE_ROOT, env=bun_env)
     if fetch_browser:
         cache = Path(os.environ.get("CAMOUFOX_CACHE", str(ROOT / "runtime" / "cache" / "camoufox"))).expanduser().resolve()
         cache.mkdir(parents=True, exist_ok=True)
@@ -130,17 +84,14 @@ def install_dependencies(uv: str, bun: str, fetch_browser: bool) -> None:
 
 
 def setup(args: argparse.Namespace) -> Path:
-    if not (ROOT / "scripts" / "bootstrap_sources.py").exists():
+    if not (ROOT / "scripts" / "yteam_tui.py").exists():
         raise RuntimeError(f"not a YTEAM checkout: {ROOT}")
     if args.dry_run:
         print(f"YTEAM root: {ROOT}")
-        profile = "full" if args.full_sources else "runtime"
-        print(f"Would bootstrap the {profile} upstream source profile, install Hermes, install Bun/OpenCode dependencies, and install the launcher.")
+        print("Would install the standalone YTEAM runtime and native TUI; no upstream vendor checkout is required.")
         return (args.bin_dir or default_bin()).resolve() / ("yteam.cmd" if os.name == "nt" else "yteam")
-    bootstrap_sources(args.full_sources)
     uv = ensure_uv()
-    bun = find_bun() or install_bun()
-    install_dependencies(uv, bun, not args.skip_browser_download)
+    install_dependencies(uv, not args.skip_browser_download)
     path = install((args.bin_dir or default_bin()).resolve())
     print(f"Installed YTEAM launcher: {path}")
     print("Global OpenCode was not modified.")
@@ -151,7 +102,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bin-dir", type=Path, help="User-local bin directory")
     parser.add_argument("--skip-browser-download", action="store_true", help="Install Camoufox package but do not download its browser")
-    parser.add_argument("--full-sources", action="store_true", help="Fetch all upstream source, tests, and docs (developer/CI mode)")
     parser.add_argument("--dry-run", action="store_true", help="Show setup plan without downloading or modifying anything")
     args = parser.parse_args()
     try:

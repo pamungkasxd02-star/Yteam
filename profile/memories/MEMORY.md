@@ -3,10 +3,10 @@
 ## Stable operating rules
 
 - Yteam is dedicated to authorized bug bounty, penetration testing, application-security QA, triage, evidence, and report writing.
-- The OpenCode TUI is presentation only; Yteam/Hermes owns tools, memory, skills, browser, vision routing, and reports.
+- The native YTEAM runtime owns tools, memory, skills, browser observation, event logging, and reports; the TUI is its local command surface.
 - Reports and PoCs are written in English; operator chat is concise Indonesian.
 - Evidence and temporary artifacts belong on the D: workspace.
 
 ## Verified lessons
 
-<!-- Hermes appends compact, non-secret lessons here through the memory tool. -->
+<!-- YTEAM appends compact, non-secret lessons through its local learning path. -->

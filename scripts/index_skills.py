@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a compact metadata catalog for the combined skill sources."""
+"""Build a compact metadata catalog for the native YTEAM skill sources."""
 
 from __future__ import annotations
 
@@ -11,12 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIRS = (
-    ROOT / ".opencode" / "skills",
-    ROOT / ".." / ".agents" / "skills",
-    ROOT / ".." / ".opencode" / "skills",
-    ROOT / "vendor" / "hermes-agent" / "skills",
-    ROOT / "vendor" / "hermes-agent" / "optional-skills" / "security",
-    ROOT / "vendor" / "cybermes" / "skills",
+    ROOT / "skills",
 )
 
 

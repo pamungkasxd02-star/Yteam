@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the portable multi-stage Yteam/Cybermes web hunting pipeline."""
+"""Run the portable multi-stage native YTEAM web hunting pipeline."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def normalize_target(value: str) -> str:
 
 def locate(name: str) -> str | None:
     suffix = ".exe" if os.name == "nt" else ""
-    for path in (ROOT / "runtime" / "bin" / f"{name}{suffix}", ROOT / "vendor" / "cybermes" / "tools" / "bin" / f"{name}{suffix}"):
+    for path in (ROOT / "runtime" / "bin" / f"{name}{suffix}",):
         if path.exists() and path.is_file():
             return str(path)
     return shutil.which(name)
@@ -222,7 +222,7 @@ def run(target: str, output: Path, run_id: str | None, depth: int, rate: float, 
     stage("route_mining", "completed", f"Adaptive track plan saved; eligible tracks: {', '.join(eligible_tracks)}.")
 
     skill_script = ROOT / "scripts" / "yteam_skills.py"
-    skill_registry = output / "cybermes-skill-registry.json"
+    skill_registry = output / "yteam-skill-registry.json"
     skill_index = subprocess.run([sys.executable, str(skill_script), "index", "--output", str(skill_registry)], capture_output=True, text=True, check=False)
     (output / "skill-index.stdout.txt").write_text(skill_index.stdout, encoding="utf-8")
     (output / "skill-index.stderr.txt").write_text(skill_index.stderr, encoding="utf-8")
@@ -240,8 +240,8 @@ def run(target: str, output: Path, run_id: str | None, depth: int, rate: float, 
         bundle_data = json.loads(bundle.stdout)
     except json.JSONDecodeError:
         bundle_data = {"selected_count": 0, "skills": [], "signals": skill_signals}
-    write_json(output / "cybermes-skill-bundle.json", bundle_data)
-    stage("route_mining", "completed", f"Complete Cybermes skill registry and adaptive bundle saved; selected {bundle_data.get('selected_count', 0)} skills.")
+    write_json(output / "yteam-skill-bundle.json", bundle_data)
+    stage("route_mining", "completed", f"Complete YTEAM skill registry and adaptive bundle saved; selected {bundle_data.get('selected_count', 0)} skills.")
 
     intelligence_script = ROOT / "scripts" / "yteam_intelligence.py"
     observations = output / "intelligence" / "observations.jsonl"
@@ -293,7 +293,7 @@ def run(target: str, output: Path, run_id: str | None, depth: int, rate: float, 
         "policy": manifest["policy"],
         "available_tools": json.loads((output / "toolchain.json").read_text(encoding="utf-8")) if (output / "toolchain.json").exists() else [],
         "skill_registry_path": str(skill_registry),
-        "skill_bundle_path": str(output / "cybermes-skill-bundle.json"),
+        "skill_bundle_path": str(output / "yteam-skill-bundle.json"),
         "selected_skill_count": bundle_data.get("selected_count", 0),
         "eligible_tracks": eligible_tracks,
         "next_actions": next_actions,
@@ -302,13 +302,13 @@ def run(target: str, output: Path, run_id: str | None, depth: int, rate: float, 
         "hidden_surface_path": str(hidden_output),
         "hidden_hypothesis_count": hidden_data.get("hypothesis_count", 0),
         "hidden_safe_checks": hidden_data.get("safe_checks", [])[:40],
-        "required_llm_contract": ["Read scope.json, recon.json, track_plan.json, cybermes-skill-bundle.json, and hypotheses.json", "Select one eligible track and matching skill bundle", "Use researcher-owned fixtures and safe read-first proof", "Record observation/proof/blocker", "Run triage gate before any finding"],
+        "required_llm_contract": ["Read scope.json, recon.json, track_plan.json, yteam-skill-bundle.json, and hypotheses.json", "Select one eligible track and matching skill bundle", "Use researcher-owned fixtures and safe read-first proof", "Record observation/proof/blocker", "Run triage gate before any finding"],
         "non_claims": manifest["non_claims"],
     }
     write_json(output / "next_actions.json", next_actions)
     write_json(output / "hunt_context.json", context)
     context_lines = [
-        "# Yteam Hunt Context", "", f"- Target: `{target}`", f"- Run ID: `{run_id or 'standalone'}`", f"- Scope: `{manifest['scope']['mode']}` — {manifest['scope']['reason']}", f"- Eligible tracks: {', '.join(eligible_tracks) or 'none'}", f"- Selected Cybermes skills: {bundle_data.get('selected_count', 0)}", "", "## Required model contract", "", "1. Read `scope.json`, `recon.json`, `hidden_surface.json`, `track_plan.json`, `cybermes-skill-bundle.json`, and `hypotheses.json`.", "2. Select one eligible track, one matching skill bundle, and one concrete impact objective.", "3. Use researcher-owned fixtures, read-first requests, and safe rate limits.", "4. Record proof, negative result, or blocker; never promote anomaly directly to finding.", "5. Run triage validation before creating any report.", "", "## Hidden-surface review", "", f"- Hypotheses: {hidden_data.get('hypothesis_count', 0)}", *(f"- `{item.get('id')}` [{item.get('track')}]: {item.get('class')} — {item.get('signal')}" for item in hidden_data.get('hypotheses', [])[:20]), "", "## Next actions", "", *(f"- **{item['track']}** ({item['status']}): {item['action']} — {item['safe_default']}" for item in next_actions), "", "## Top routes", "", *(f"- `{item.get('url')}` — priority {item.get('priority')} — {', '.join(item.get('reasons', []))}" for item in top_routes), "", "## Non-claims", "", *(f"- {item}" for item in manifest["non_claims"]), ""]
+        "# Yteam Hunt Context", "", f"- Target: `{target}`", f"- Run ID: `{run_id or 'standalone'}`", f"- Scope: `{manifest['scope']['mode']}` — {manifest['scope']['reason']}", f"- Eligible tracks: {', '.join(eligible_tracks) or 'none'}", f"- Selected YTEAM skills: {bundle_data.get('selected_count', 0)}", "", "## Required model contract", "", "1. Read `scope.json`, `recon.json`, `hidden_surface.json`, `track_plan.json`, `yteam-skill-bundle.json`, and `hypotheses.json`.", "2. Select one eligible track, one matching skill bundle, and one concrete impact objective.", "3. Use researcher-owned fixtures, read-first requests, and safe rate limits.", "4. Record proof, negative result, or blocker; never promote anomaly directly to finding.", "5. Run triage validation before creating any report.", "", "## Hidden-surface review", "", f"- Hypotheses: {hidden_data.get('hypothesis_count', 0)}", *(f"- `{item.get('id')}` [{item.get('track')}]: {item.get('class')} — {item.get('signal')}" for item in hidden_data.get('hypotheses', [])[:20]), "", "## Next actions", "", *(f"- **{item['track']}** ({item['status']}): {item['action']} — {item['safe_default']}" for item in next_actions), "", "## Top routes", "", *(f"- `{item.get('url')}` — priority {item.get('priority')} — {', '.join(item.get('reasons', []))}" for item in top_routes), "", "## Non-claims", "", *(f"- {item}" for item in manifest["non_claims"]), ""]
     (output / "hunt_context.md").write_text("\n".join(context_lines), encoding="utf-8")
 
     if use_external:
@@ -324,9 +324,9 @@ def run(target: str, output: Path, run_id: str | None, depth: int, rate: float, 
         manifest["tool_runs"].append(run_external("nuclei", ["-u", target, "-silent", "-rate-limit", str(max(1, min(5, int(rate * 5)))), "-H", f"X-Bug-Bounty: {ATTRIBUTION}", "-tags", "cve,misconfig,exposure", "-severity", "medium,high,critical"], output / "nuclei.txt", 120, os.environ.copy()))
         stage("candidate_validation", "completed", "Verification output is candidate evidence only and requires manual proof.")
     else:
-        stage("candidate_validation", "skipped", "No optional validation scan selected; hypothesis-driven validation remains in Hermes.")
+        stage("candidate_validation", "skipped", "No optional validation scan selected; hypothesis-driven validation remains in the YTEAM runtime.")
     stage("evidence", "completed", "Raw outputs and redacted recon artifacts are target-scoped under the run directory.")
-    stage("triage", "active", "Hermes must apply the seven-question gate before any report is written.")
+    stage("triage", "active", "YTEAM must apply the seven-question gate before any report is written.")
     manifest["status"] = "ready_for_analysis"
     manifest["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     write_json(output / "hunt.json", manifest)
@@ -338,7 +338,7 @@ def run(target: str, output: Path, run_id: str | None, depth: int, rate: float, 
             advance(run_id, "triage", "active")
         finally:
             sys.path.remove(str(ROOT / "scripts"))
-    append_pipeline_event(run_id, "note", f"Deep hunt orchestration completed: {len(manifest['tool_runs'])} optional tool runs; status requires Hermes analysis.", "triage")
+    append_pipeline_event(run_id, "note", f"Deep hunt orchestration completed: {len(manifest['tool_runs'])} optional tool runs; status requires YTEAM analysis.", "triage")
     return manifest
 
 
@@ -385,8 +385,8 @@ def main() -> int:
             bundle_data = json.loads(bundle.stdout)
         except json.JSONDecodeError:
             bundle_data = {"selected_count": 0, "skills": []}
-        write_json(recon_path.parent / "cybermes-skill-bundle.json", bundle_data)
-        print(json.dumps({"target": args.target, "eligible_tracks": eligible, "selected_skills": bundle_data.get("selected_count", 0), "track_plan": str(recon_path.parent / "track_plan.json"), "skill_bundle": str(recon_path.parent / "cybermes-skill-bundle.json")}, indent=2))
+        write_json(recon_path.parent / "yteam-skill-bundle.json", bundle_data)
+        print(json.dumps({"target": args.target, "eligible_tracks": eligible, "selected_skills": bundle_data.get("selected_count", 0), "track_plan": str(recon_path.parent / "track_plan.json"), "skill_bundle": str(recon_path.parent / "yteam-skill-bundle.json")}, indent=2))
         return 0
     except ValueError as error:
         print(f"yteam_hunt: {error}", file=sys.stderr)

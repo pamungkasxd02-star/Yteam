@@ -4,11 +4,10 @@ runtime/
 *.stderr.txt
 *.stdout.txt
 
-# Upstream sources are reproducibly fetched by scripts/bootstrap_sources.py.
-# Keep nested Git checkouts out of the Yteam repository (avoid embedded-repo
-# gitlinks and avoid redistributing third-party source/data accidentally).
-/vendor/*/
-!/vendor/SOURCES.md
+# Optional local experiments and dependency checkouts must never be published.
+vendor/
+.opencode/
+opencode.json
 
 # Python caches and local environments
 __pycache__/
@@ -20,7 +19,7 @@ venv/
 # Credentials and private local profile state
 .env
 profile/.env
-runtime/yteam-hermes-home/
+runtime/yteam-home/
 runtime/yteam-model.yaml
 runtime/yteam-model.local.yaml
 yteam.local.yaml

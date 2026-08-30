@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Initialize a non-secret Yteam Hermes profile without overwriting user data."""
+"""Initialize a non-secret YTEAM profile without overwriting user data."""
 
 from __future__ import annotations
 
@@ -14,13 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def default_home() -> Path:
-    configured = os.environ.get("YTEAM_HERMES_HOME")
+    configured = os.environ.get("YTEAM_HOME")
     if configured:
         return Path(configured).expanduser().resolve()
-    existing = os.environ.get("HERMES_HOME")
-    if existing:
-        return Path(existing).expanduser().resolve()
-    return (ROOT / "runtime" / "yteam-hermes-home").resolve()
+    return (ROOT / "runtime" / "yteam-home").resolve()
 
 
 def copy_if_missing(source: Path, target: Path) -> None:
@@ -49,7 +46,7 @@ def initialize(home: Path | None = None) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--home", type=Path, help="Yteam Hermes home; defaults to runtime/yteam-hermes-home")
+    parser.add_argument("--home", type=Path, help="YTEAM home; defaults to runtime/yteam-home")
     args = parser.parse_args()
     print(initialize(args.home))
     return 0

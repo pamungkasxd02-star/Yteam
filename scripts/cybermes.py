@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
-"""Run Cybermes Go utilities directly from the Yteam workspace."""
+"""Run native YTEAM security utilities."""
 
 from __future__ import annotations
 
 import argparse
-import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+from yteam_native_tools import main as native_tools_main
 
-ROOT = Path(__file__).resolve().parents[1]
-CYBERMES = ROOT / "vendor" / "cybermes"
+
 COMMANDS = {
     "smart-pipe": "smart_pipe",
     "secret-scan": "secret_scan",
@@ -26,23 +24,10 @@ def main() -> int:
     parser.add_argument("command", choices=sorted(COMMANDS))
     parser.add_argument("args", nargs=argparse.REMAINDER)
     parsed = parser.parse_args()
-    if not CYBERMES.exists():
-        print(f"Cybermes source checkout is missing: {CYBERMES}", file=sys.stderr)
-        return 2
-    name = COMMANDS[parsed.command]
-    suffix = ".exe" if os.name == "nt" else ""
-    binary = ROOT / "runtime" / "bin" / f"{name}{suffix}"
-    if binary.exists():
-        command = [str(binary), *parsed.args]
-    else:
-        go = shutil.which("go")
-        if not go:
-            print("Go is required, or build the selected utility into runtime/bin.", file=sys.stderr)
-            return 2
-        command = [go, "run", f"./cmd/{name}", *parsed.args]
-    environment = os.environ.copy()
-    environment.setdefault("CYBERMES_ROOT", str(CYBERMES))
-    return subprocess.run(command, cwd=CYBERMES, env=environment, check=False).returncode
+    # Keep the compatibility command names hyphenated; the native utility CLI
+    # intentionally exposes the same stable public spelling.
+    sys.argv = [sys.argv[0], parsed.command, *parsed.args]
+    return native_tools_main()
 
 
 if __name__ == "__main__":

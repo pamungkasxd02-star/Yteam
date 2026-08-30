@@ -1,14 +1,13 @@
 # Copy this file to yteam.local.yaml and fill the local values.
 # yteam.local.yaml is ignored by Git and must never be committed.
-# The launcher persists only provider/model/base_url to the active Hermes
-# config.yaml and passes api_key to the child process ephemerally.
+# The native launcher reads this file locally and never commits it.
 
-provider: opencode-free
+provider: zen-free
 model: laguna-s-2.1-free
 api_key: ""
 base_url: "https://opencode.ai/zen/v1"
 
 # Optional auxiliary model for screenshots/images when the main model is text-only.
 vision:
-  provider: opencode-free
+  provider: zen-free
   model: laguna-s-2.1-free

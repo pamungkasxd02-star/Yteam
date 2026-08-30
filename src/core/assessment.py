@@ -68,7 +68,7 @@ def build_registry() -> EngineRegistry:
         ctx.artifacts.text("recon.stdout.txt", result.stdout)
         ctx.artifacts.text("recon.stderr.txt", result.stderr)
         ctx.emit("recon.completed" if result.returncode == 0 else "recon.blocked", "recon", returncode=result.returncode)
-        return EngineResult("recon", "completed" if result.returncode == 0 else "blocked", "Full Yteam/Cybermes hunt engine completed." if result.returncode == 0 else "Recon blocked; inspect recon.stderr.txt.", ["recon/hunt.json", "recon/recon.json", "recon/routes.jsonl", "recon/track_plan.json", "recon/hidden_surface.json", "recon/cybermes-skill-bundle.json"])
+        return EngineResult("recon", "completed" if result.returncode == 0 else "blocked", "Full native YTEAM hunt engine completed." if result.returncode == 0 else "Recon blocked; inspect recon.stderr.txt.", ["recon/hunt.json", "recon/recon.json", "recon/routes.jsonl", "recon/track_plan.json", "recon/hidden_surface.json", "recon/yteam-skill-bundle.json"])
 
     def bot_bypass(ctx: AssessmentContext) -> EngineResult:
         from bot_bypass.detector import gate_summary

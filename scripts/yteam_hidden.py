@@ -3,7 +3,7 @@
 
 This module turns already-collected, in-scope recon routes into a bounded
 review plan. It does not probe targets, generate exploit payloads, or promote
-an anomaly to a finding. Hermes may execute the returned checks only after the
+    an anomaly to a finding. YTEAM may execute the returned checks only after the
 normal scope and policy gates pass.
 """
 

@@ -6,14 +6,14 @@ Read this file before running the installer.
 
 | Software | Version | Purpose |
 |---|---:|---|
-| Git | 2.40+ | Download upstream sources |
-| Python | 3.11–3.13 | Run YTEAM and Hermes |
+| Git | 2.40+ | Clone and update YTEAM |
+| Python | 3.11–3.13 | Run the native YTEAM runtime |
 | PowerShell or POSIX shell | Current | Run the installer |
-| Internet | HTTPS | Download sources/dependencies and call the model provider |
-| Model API key | Not required for automatic OpenCode Zen Free; provider-specific for overrides | Run the AI agent |
+| Internet | HTTPS | Install dependencies and call the model provider |
+| Model API key | Not required for Zen Free; provider-specific for overrides | Run the AI client |
 
-The TUI also requires Bun. The installer installs Bun automatically when it is
-not already available.
+The native YTEAM TUI does not require Bun, Go, an external agent runtime, or a
+separate UI application.
 
 ## Supported systems
 
@@ -24,44 +24,28 @@ not already available.
 
 ## Installed automatically
 
-`python scripts/install_yteam.py` installs or prepares a sparse runtime tree:
+`python scripts/install_yteam.py` creates a local runtime tree:
 
-- OpenCode under `vendor/opencode`;
-- Hermes Agent under `vendor/hermes-agent`;
-- Cybermes under `vendor/cybermes`;
-- Hermes Python environment at `vendor/hermes-agent/.venv`;
-- OpenCode JavaScript dependencies with `bun install`;
-- Camoufox and its browser runtime;
+- Native YTEAM TUI under `scripts/yteam_tui.py`;
+- Native policy, session, event, model, skill, and assessment components;
+- YTEAM virtual environment at `runtime/.venv`;
+- PyYAML and optional Camoufox dependencies from `requirements.txt`;
 - the user-local `yteam` launcher.
 
-The default runtime profile excludes upstream tests, documentation, website,
-desktop/web products, benchmarks, and the full Cybermes knowledge corpus. CI or
-contributors who need those files can use:
-
-```text
-python scripts/install_yteam.py --full-sources
-```
-
-Dependency files are kept at the repository root:
-
-```text
-requirements.txt          # all direct YTEAM Python dependencies, including Camoufox
-```
-
-The upstream source directories are not committed to this repository. The
-bootstrap script fetches them using the revisions recorded in `vendor/SOURCES.md`.
+No vendor checkout is downloaded. No global OpenCode, Bun, or shell tool is
+modified. Generated runtime and engagement artifacts remain local.
 
 ## Optional components
 
 | Component | Purpose | If missing |
 |---|---|---|
-| Go 1.22+ | Faster Cybermes utilities | Native/Python fallbacks |
-| Camoufox | Browser observation for Botterdop | Native HTTP detection |
+| Camoufox | Isolated browser observation for anti-bot classification | Native HTTP detection |
 | Chrome/Chromium/Edge | Browser proof and visual QA | HTTP/text workflows |
 | Nuclei, FFUF, Arjun, Dalfox, SQLMap | Targeted validation helpers | Manual safe validation |
+| Go-based helpers | Optional external tooling | Native/Python fallbacks |
 
-Camoufox is installed by default from the single `requirements.txt`. Skip only
-the browser binary download with:
+Camoufox is installed from the single root requirements file. Skip only its
+browser binary download with:
 
 ```text
 python scripts/install_yteam.py --skip-browser-download
@@ -69,58 +53,25 @@ python scripts/install_yteam.py --skip-browser-download
 
 ## Model
 
-No model setup is required after installation. YTEAM automatically detects the
-current OpenCode Zen Free catalog and starts with the upstream Hermes
-`opencode-free` provider through the keyless free tier. It deliberately does
-not use `opencode-go`:
+YTEAM automatically discovers the current Zen Free catalog and starts with:
 
 ```text
-provider: opencode-free
+provider: zen-free
 model: laguna-s-2.1-free
-endpoint: https://opencode.ai/zen/v1
+base_url: https://opencode.ai/zen/v1
 ```
 
-The native OpenCode `/models` picker receives the detected free choices, such as
-`big-pickle`, `mimo-v2.5-free`, and `laguna-s-2.1-free`. If the Zen catalog is
-temporarily unavailable at startup, the launcher uses a bundled fallback list.
-No API key is needed for this provider.
+The native `/models` command displays the live choices. If the catalog is
+temporarily unavailable, a bundled fallback list is used. No API key is needed
+for the free default.
 
-The local file below is optional and is only needed to override that default.
+To override it, copy `yteam.local.example.yaml` to `yteam.local.yaml`. That
+file is ignored by Git and the key is held only in memory by the native client.
 
-Create the local configuration file:
-
-```text
-yteam.local.yaml
-```
-
-from:
-
-```text
-yteam.local.example.yaml
-```
-
-Example:
-
-```yaml
-provider: opencode-free
-model: laguna-s-2.1-free
-api_key: ""
-base_url: "https://opencode.ai/zen/v1"
-```
-
-This file is ignored by Git. Never publish it. The API key is passed to the
-Hermes child process at runtime and is not stored in the generated routing
-config. `opencode-free` is the keyless OpenCode Zen free tier. For paid Zen or
-another provider, replace the provider/model/base URL and add that provider's
-API key. The free default needs no account or API key.
-
-## Disk
+## Disk and local data
 
 Keep dependencies, browser downloads, runtime data, evidence, and reports on a
-data drive when possible. Allow at least 5 GB free; 15 GB is recommended for
-all upstream dependencies and browser data.
-
-Ignored local data includes:
+data drive when possible. Ignored local data includes:
 
 ```text
 yteam.local.yaml

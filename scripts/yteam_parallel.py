@@ -73,7 +73,7 @@ class ParallelScheduler:
 
 def _sample_probe(url: str) -> dict:
     # Minimal read-only sample for demonstration/testing; real recon uses
-    # yteam_recon/probe engines through Hermes terminal.
+    # yteam_recon/probe engines through the YTEAM terminal.
     import socket
 
     host = url.split("://")[-1].split("/")[0].split(":")[0]

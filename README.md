@@ -1,221 +1,144 @@
 # YTEAM
 
-YTEAM is a local security-research workbench built around the upstream
-OpenCode terminal UI, Hermes Agent runtime, and Cybermes knowledge/tools.
+YTEAM is a standalone, local-first security-research workbench. It owns its
+native Python terminal UI, policy engine, JSONL session store, append-only event
+ledger, model client, skill registry, bounded recon pipeline, hypothesis
+planner, evidence hygiene, and multi-pillar assessment DAG.
 
-It has one custom OpenCode command:
-
-```text
-/bb <authorized-target>
-```
-
-All other slash commands remain native OpenCode commands.
+There is **no required vendored agent runtime, external UI, Bun installation,
+or global tool mutation**. YTEAM can use an OpenAI-compatible model endpoint,
+including the keyless Zen Free catalog, while keeping local sessions and
+assessment artifacts under `runtime/`.
 
 ## Install
 
 ### Windows
 
-Install Git, Python 3.11–3.13, and PowerShell. Then run:
-
 ```powershell
 git clone https://github.com/pamungkasxd02-star/Yteam.git Yteam
 cd Yteam
-python scripts\install_yteam.py
+python scripts\install_yteam.py --skip-browser-download
 ```
-
-The installer automatically:
-
-1. downloads only the pinned runtime source needed by OpenCode, Hermes Agent,
-   and Cybermes; tests, docs, website, desktop, and full knowledge corpora are
-   not fetched by default;
-2. creates `vendor\hermes-agent\.venv`;
-3. installs Hermes dependencies;
-4. installs the single root `requirements.txt` dependencies;
-5. installs Bun if it is missing;
-6. runs `bun install` for OpenCode;
-7. fetches the Camoufox browser runtime;
-8. installs the `yteam` launcher in the user bin directory.
-
-Open a new terminal after the installer prints the PATH command.
-
-Contributor/CI mode is available when the complete upstream source tree is
-needed:
-
-```powershell
-python scripts\install_yteam.py --full-sources
-```
-
-Normal users should keep the default lean runtime profile.
 
 ### macOS/Linux
 
-Install Git, Python 3.11–3.13, and a POSIX shell. Then run:
-
 ```bash
-git clone https://github.com/pamungkasxd02-star/Yteam.git Yteam
-cd Yteam
-python3 scripts/install_yteam.py
+git clone https://github.com/pamungkasxd02-star/Yteam.git yteam
+cd yteam
+python3 scripts/install_yteam.py --skip-browser-download
 ```
 
-The same source, Hermes, Bun, OpenCode, Camoufox, and launcher setup is used.
+The installer creates `runtime/.venv`, installs `requirements.txt`, and places
+a user-local `yteam` launcher. Omit `--skip-browser-download` if the optional
+Camoufox browser observer is required.
 
-To see the plan without installing anything:
+Preview the plan without changing anything:
 
-```bash
+```text
 python scripts/install_yteam.py --dry-run
 ```
 
-To install Camoufox without downloading its browser binary:
+## Native TUI
 
-```bash
-python scripts/install_yteam.py --skip-browser-download
-```
-
-Dependency files:
-
-```text
-requirements.txt          # all direct YTEAM Python dependencies, including Camoufox
-```
-
-## Model
-
-YTEAM starts with **OpenCode Zen Free automatically**. No account, API key, or
-local model file is required. The launcher detects the current free-model list
-from OpenCode Zen and exposes it through the native OpenCode `/models` picker.
-It uses the upstream Hermes `opencode-free` provider—not `opencode-go`—with a
-safe default model:
-
-```text
-provider: opencode-free
-model: laguna-s-2.1-free
-endpoint: https://opencode.ai/zen/v1
-```
-
-The free choices include models such as `big-pickle`, `mimo-v2.5-free`,
-`deepseek-v4-flash-free`, and `laguna-s-2.1-free` when advertised by Zen. Use
-`/models` in the TUI to switch them. If Zen's catalog is temporarily
-unreachable, YTEAM uses a bundled free-model fallback list.
-
-Start immediately after installation:
+Start it with:
 
 ```text
 yteam
 ```
 
-### Optional model override
+Commands:
 
-Only copy the local-only template if you want to override the free default or
-use a paid/other provider:
-
-```powershell
-Copy-Item .\yteam.local.example.yaml .\yteam.local.yaml
-notepad .\yteam.local.yaml
+```text
+/help                         show commands
+/models                       discover/list Zen Free models
+/model <model-id>             select a model
+/status                       show policy/session/runtime state
+/history                      show the current bounded conversation
+/clear                        create a fresh local session
+/doctor                       run local diagnostics
+/bb <authorized-http-target>  run the scoped read-only assessment
+/quit                         exit
 ```
 
-Set the provider, model, key, and endpoint:
+`/bb` drives the native pipeline:
+
+```text
+scope → inventory → baseline → bounded crawl → route mining
+      → skill selection → hidden-surface hypotheses → intelligence
+      → evidence manifest → triage handoff
+```
+
+The pipeline is fail-closed, low-rate, read-only by default, and never
+auto-submits a report. Recon signals, scanner matches, and hypotheses are not
+findings until reproducible impact and triage gates pass.
+
+## Model configuration
+
+The default is keyless Zen Free:
 
 ```yaml
-provider: opencode-free
+provider: zen-free
 model: laguna-s-2.1-free
 api_key: ""
 base_url: "https://opencode.ai/zen/v1"
 ```
 
-`yteam.local.yaml` is ignored by Git. The launcher writes only non-secret model
-routing to the active Hermes profile and passes a paid-provider API key to
-Hermes at runtime. The free provider remains keyless. Do not commit the local
-file.
+To override it, copy `yteam.local.example.yaml` to `yteam.local.yaml`. The
+local file is ignored by Git; its API key is held in memory and is never written
+to sessions, event logs, or generated assessment artifacts. `/models` refreshes
+the live catalog and falls back to a bundled list when the endpoint is offline.
 
-The model name shown in the TUI is **YTEAM**. The internal OpenCode model ID is
-`yteam/yteam-agent`; the launcher maps the selected free model to Hermes
-`opencode-free` automatically. If `yteam.local.yaml` exists, its provider/model
-values override the default.
-If you choose OpenRouter, paid Zen, or another provider, put its API key in the
-same `api_key` field. The free default does not require this file or a key.
+The native client sends standard OpenAI-compatible `POST /chat/completions`
+requests with SSE streaming. It does not start a gateway or proxy process.
 
-## Run
-
-Start YTEAM:
+## Architecture
 
 ```text
-yteam
+scripts/yteam_tui.py       terminal UI
+scripts/yteam_runtime.py   commands, policy, events, model/session lifecycle
+scripts/yteam_ai.py        direct OpenAI-compatible SSE client
+scripts/yteam_session.py   bounded JSONL conversations
+scripts/yteam_models.py    local config + live model catalog
+scripts/yteam_native_tools.py
+                            smart pipe, secrets, knowledge, reports
+scripts/yteam_hunt.py      scoped web recon and hypothesis handoff
+scripts/yteam_engine.py    prerequisite-aware DAG orchestration
+src/core/                  multi-pillar assessment control plane
+skills/                    first-party native playbooks
 ```
 
-Then run the only YTEAM command:
+Optional Camoufox is an isolated observer for browser classification and visual
+review only. It does not solve challenges, evade WAFs, rotate identities, or
+perform credential attacks.
+
+## Local output
+
+Runtime and engagement data is intentionally ignored by Git:
 
 ```text
-/bb https://authorized-target.example
+runtime/bb-runs/<run-id>/
+runtime/assessments/<run-id>/
+runtime/sessions/<session-id>.jsonl
+runtime/events.jsonl
 ```
 
-The pipeline is:
+Reports, evidence, recon dumps, secrets, packs, local model config, and browser
+caches must stay local. Never commit cookies, bearer tokens, customer data, or
+unredacted evidence.
 
-```text
-scope → toolchain → recon → Botterdop/Camoufox → hidden-surface analysis
-      → hypothesis → safe validation → evidence → triage
-```
-
-The system is read-only by default, rate-limited, scope-gated, and never
-auto-submits reports. `PACK`, `CAND`, `MID`, `BLOCKED`, and `0` are evidence
-states, not guesses.
-
-## Botterdop
-
-Botterdop detects Cloudflare, Akamai, DataDome, Kasada, PerimeterX/HUMAN,
-reCAPTCHA, Turnstile, WAF blocks, and `429` responses. It slows down or stops
-when a gate is detected. Camoufox is an optional isolated browser observer; it
-does not solve CAPTCHA, evade WAFs, rotate identities, or rotate proxies.
-
-## Output
-
-Runtime data stays local and is ignored by Git:
-
-```text
-runtime/bb-runs/<run-id>/<target>/
-runtime/assessments/<run-id>/<target>/
-```
-
-Useful files include:
-
-```text
-scope.json
-recon/recon.json
-hidden_surface.json
-hypotheses.json
-hunt_context.md
-assessment_manifest.json
-```
-
-## Troubleshooting
-
-Run the local environment check:
+## Verify
 
 ```powershell
 python scripts\yteam_doctor.py --json
+python -m compileall -q scripts src
+python -m unittest discover -s tests -p "test_*.py" -v
+git diff --check
 ```
 
-If Bun is missing, install it and rerun:
+## Authorized use
 
-```powershell
-powershell -c "irm bun.sh/install.ps1 | iex"
-```
-
-If Camoufox is missing:
-
-```powershell
-python -m pip install camoufox
-python -m camoufox fetch
-```
-
-## Requirements and legal use
-
-Read [`REQUIREMENTS.md`](REQUIREMENTS.md) before installing. Publishing notes
-are in [`docs/PUBLISHING.md`](docs/PUBLISHING.md).
-
-Use YTEAM only on systems you own or are explicitly authorized to test. Do not
-use it for credential stuffing, unauthorized access, destructive testing,
-denial of service, persistence, or customer-data access.
-
-## License
-
-YTEAM integration code is MIT-licensed. See `THIRD_PARTY_NOTICES.md` for the
-licenses of the upstream projects fetched by the installer.
+Use YTEAM only against assets explicitly authorized by a HackerOne, Bugcrowd,
+Intigriti, or equivalent engagement. The default policy forbids destructive
+actions, DoS, credential stuffing, customer-object access, resource claims, and
+automatic report submission. See `REQUIREMENTS.md`, `SECURITY.md`, and
+`docs/PUBLISHING.md`.

@@ -43,10 +43,10 @@ DEFINITIONS = (
     ("wafw00f", "WAF fingerprinting", "probe", "fingerprint only; no bypass spray"),
     ("sqlmap", "SQL injection verification", "verify", "candidate endpoint only"),
     ("dalfox", "XSS candidate analysis", "verify", "candidate URLs only"),
-    ("smart_pipe", "Raw stream filtering and archiving", "local", "preserve raw output on D:"),
-    ("search_knowledge", "Cybermes knowledge search", "local", "targeted queries only"),
-    ("secret_scan", "Redacted secret detection", "local", "never print secret values"),
-    ("aggregate_reports", "Target-scoped report aggregation", "local", "read/report generation only"),
+    ("smart-pipe", "Raw stream filtering and archiving", "local", "preserve raw output on D:"),
+    ("search-knowledge", "Native YTEAM knowledge search", "local", "targeted queries only"),
+    ("secret-scan", "Native redacted secret detection", "local", "never print secret values"),
+    ("aggregate-reports", "Native target-scoped report aggregation", "local", "read/report generation only"),
 )
 
 
@@ -56,8 +56,6 @@ def locate(name: str) -> tuple[str | None, str]:
     suffix = ".exe" if os.name == "nt" else ""
     for path in (
         ROOT / "runtime" / "bin" / f"{name}{suffix}",
-        ROOT / "vendor" / "cybermes" / "tools" / "bin" / f"{name}{suffix}",
-        ROOT / "vendor" / "cybermes" / "bin" / f"{name}{suffix}",
     ):
         if path.exists() and path.is_file():
             return str(path), "project-local"
@@ -69,11 +67,11 @@ def locate(name: str) -> tuple[str | None, str]:
 
 def inventory() -> list[Tool]:
     tools: list[Tool] = []
-    source_commands = {"smart_pipe", "search_knowledge", "secret_scan", "aggregate_reports"}
+    source_commands = {"smart-pipe", "search-knowledge", "secret-scan", "aggregate-reports"}
     for name, purpose, category, safe_default in DEFINITIONS:
         command, source = locate(name)
-        if command is None and name in source_commands and (ROOT / "vendor" / "cybermes" / "cmd" / name / "main.go").exists() and shutil.which("go"):
-            command, source = f"go run ./cmd/{name}", "Cybermes source fallback"
+        if command is None and name in source_commands:
+            command, source = f"python scripts/yteam_native_tools.py {name}", "YTEAM native"
         tools.append(Tool(name, purpose, category, command, command is not None, source, safe_default))
     return tools
 

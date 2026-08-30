@@ -8,4 +8,4 @@
 
 ## Preferences learned over time
 
-<!-- Hermes appends stable non-secret preferences here through the memory tool. -->
+<!-- YTEAM appends stable non-secret preferences through its local learning path. -->

@@ -1,4 +1,3 @@
-# Direct Python dependencies used by YTEAM and optional Botterdop browser mode.
-# Hermes's full dependency set is installed from vendor/hermes-agent/pyproject.toml.
+# Direct Python dependencies used by standalone YTEAM and optional browser mode.
 PyYAML==6.0.2
 camoufox==0.4.11

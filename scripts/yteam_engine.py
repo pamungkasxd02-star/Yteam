@@ -4,7 +4,7 @@
 A stateful, DAG-driven orchestrator that schedules sub-engines (scope,
 recon, fingerprint, intel, track-router, validator, learning) adaptively
 based on run state and prerequisites. This is the layer that makes Yteam more
-complex than a linear Cybermes-style pipeline: each engine runs only when its
+    complex than a linear pipeline: each engine runs only when its
 dependency phase is satisfied, results feed forward, and the learning loop
 carries knowledge across runs.
 """
@@ -135,10 +135,10 @@ def make_registry() -> EngineRegistry:
         return {"engine": "intel", "ok": result.returncode == 0, "observation_count": data.get("observation_count", 0), "hypothesis_count": data.get("hypothesis_count", 0), "unknown_class_count": data.get("unknown_class_count", 0)}
 
     def engine_validation(ctx: RunContext) -> dict[str, Any]:
-        return {"engine": "validation", "ok": True, "note": "safe, low-rate validation performed by Hermes following the model action contract"}
+        return {"engine": "validation", "ok": True, "note": "safe, low-rate validation performed by YTEAM following the model action contract"}
 
     def engine_triage(ctx: RunContext) -> dict[str, Any]:
-        return {"engine": "triage", "ok": True, "note": "seven-question gate applied by Hermes before any finding"}
+        return {"engine": "triage", "ok": True, "note": "seven-question gate applied by YTEAM before any finding"}
 
     def engine_delivery(ctx: RunContext) -> dict[str, Any]:
         return {"engine": "delivery", "ok": True, "note": "report/MID/blocked decision recorded in ledger"}
