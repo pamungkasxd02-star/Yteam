@@ -799,6 +799,28 @@ class ProjectLayoutTests(unittest.TestCase):
         with patch("hermes_opencode.MODEL_CONFIGS", (Path(directory) / "missing.yaml",)):
             self.assertEqual(load_model_config(), DEFAULT_MODEL_CONFIG)
 
+    def test_free_picker_model_resolves_to_opencode_free_gateway_route(self) -> None:
+        sys.path.insert(0, str(ROOT / "vendor" / "hermes-agent"))
+        try:
+            from gateway.platforms.api_server import APIServerAdapter
+
+            adapter = APIServerAdapter.__new__(APIServerAdapter)
+            adapter._model_name = "yteam-agent"
+            adapter._model_routes = {
+                "mimo-v2.5-free": {
+                    "model": "mimo-v2.5-free",
+                    "provider": "opencode-free",
+                    "base_url": "https://opencode.ai/zen/v1",
+                }
+            }
+            runtime_request = adapter._session_runtime_request_from_body({"model": "mimo-v2.5-free"})
+        finally:
+            sys.path.remove(str(ROOT / "vendor" / "hermes-agent"))
+        self.assertEqual(runtime_request["requested"]["model"], "mimo-v2.5-free")
+        self.assertEqual(runtime_request["requested"]["provider"], "")
+        self.assertEqual(runtime_request["route"]["provider"], "opencode-free")
+        self.assertEqual(runtime_request["route"]["model"], "mimo-v2.5-free")
+
     def test_toolchain_reports_camoufox_as_optional_browser_dependency(self) -> None:
         sys.path.insert(0, str(ROOT / "scripts"))
         try:
