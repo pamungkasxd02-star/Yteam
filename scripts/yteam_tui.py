@@ -113,11 +113,10 @@ class TerminalUI:
         sys.stdout.flush()
 
     def run_bb(self, target: str) -> None:
-        command = [sys.executable, str(ROOT / "scripts" / "yteam_run.py"), target, "--camoufox"]
-        self.activity.append(f"assessment started: {target}")
-        result = subprocess.run(command, cwd=ROOT, check=False)
-        if result.returncode:
-            self.activity.append(f"assessment exited with code {result.returncode}")
+        from yteam_worker import ensure_worker
+
+        ensure_worker(ROOT)
+        self.activity.append(f"durable assessment admitted: {target}")
 
     def loop(self) -> int:
         while self.running:
@@ -134,14 +133,9 @@ class TerminalUI:
                 break
             result = self.runtime.command(message)
             if result is not None:
-                if self.runtime.pending_bb_target:
-                    target = self.runtime.pending_bb_target
-                    self.runtime.pending_bb_target = None
-                    self.transcript.append(("assistant", result))
-                    self.render()
-                    self.run_bb(target)
-                else:
-                    self.transcript.append(("assistant", result))
+                self.transcript.append(("assistant", result))
+                if message.startswith("/bb "):
+                    self.run_bb(message[4:].strip())
                 if self.runtime.quit_requested:
                     self.running = False
                 continue
@@ -169,6 +163,9 @@ def print_models(models: list[str], selected: str) -> None:
 
 def run_tui() -> int:
     runtime = YteamRuntime(ROOT)
+    from yteam_worker import ensure_worker
+
+    ensure_worker(ROOT)
     return TerminalUI(runtime).loop()
 
 

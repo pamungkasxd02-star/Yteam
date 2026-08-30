@@ -58,10 +58,10 @@ def write(run: dict) -> None:
     path_for(str(run["run_id"])).write_text(json.dumps(clean(run), indent=2) + "\n", encoding="utf-8")
 
 
-def prepare(target: str) -> dict:
+def prepare(target: str, run_id: str | None = None) -> dict:
     if not target.strip():
         raise ValueError("target is required for prepare; use /bb without arguments for queue triage")
-    run_id = f"bb_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(3)}"
+    run_id = run_id or f"bb_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(3)}"
     run = {
         "schema_version": 1,
         "run_id": run_id,

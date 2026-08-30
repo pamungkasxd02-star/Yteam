@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -130,13 +131,13 @@ class StandaloneYteamTests(unittest.TestCase):
             self.assertIn("/bb", runtime.help_text())
             self.assertIn("model-a", runtime.models_text())
             self.assertIn("Active model: model-b", runtime.command("/model model-b"))
-            self.assertIn("Queued read-only", runtime.command("/bb https://authorized.test"))
-            self.assertEqual(runtime.pending_bb_target, "https://authorized.test")
+            self.assertIn("Queued durable read-only", runtime.command("/bb https://authorized.test"))
+            self.assertEqual(runtime.state.list_jobs(limit=1)[0]["target"], "https://authorized.test")
             self.assertIn("Goodbye", runtime.command("/quit"))
             self.assertTrue(runtime.quit_requested)
             events = (root / "runtime" / "events.jsonl").read_text(encoding="utf-8")
             self.assertIn("model.selected", events)
-            self.assertIn("bb.requested", events)
+            self.assertIn("bb.admitted", events)
 
     def test_memory_requires_verification_before_prompt_context(self) -> None:
         from yteam_memory import LearningMemory
@@ -164,9 +165,9 @@ class StandaloneYteamTests(unittest.TestCase):
                 self.assertTrue(plane.verify_signature(body, signature, "POST", "/webhook/telegram"))
                 self.assertFalse(plane.verify_signature(body, signature, "POST", "/webhook/discord"))
                 self.assertIn('"runtime": "standalone"', plane.execute("telegram", "chat-1", "/status"))
-            self.assertIn("not allowlisted", plane.execute("telegram", "other", "/status"))
-            self.assertIn("target is not", plane.execute("telegram", "chat-1", "/bb https://other.test"))
-            self.assertIn("Queued read-only", plane.execute("telegram", "chat-1", "/bb https://authorized.test"))
+                self.assertIn("not allowlisted", plane.execute("telegram", "other", "/status"))
+                self.assertIn("target is not", plane.execute("telegram", "chat-1", "/bb https://other.test"))
+                self.assertIn("Queued durable read-only", plane.execute("telegram", "chat-1", "/bb https://authorized.test"))
 
     def test_state_store_replays_ordered_events_and_redacts_payloads(self) -> None:
         from yteam_state import StateStore
@@ -180,6 +181,23 @@ class StandaloneYteamTests(unittest.TestCase):
             self.assertEqual([item["sequence"] for item in events], [1, 2])
             self.assertNotIn("live-secret", json.dumps(events))
             self.assertEqual(store.events("session-1", after=1)[0]["kind"], "tool.completed")
+
+    def test_stale_running_job_is_requeued_for_terminal_close_recovery(self) -> None:
+        from yteam_state import StateStore
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = StateStore(Path(directory) / "state.db")
+            job = store.create_job("https://authorized.test")
+            claimed = store.claim_job("dead-worker")
+            self.assertEqual(claimed["id"], job["id"])
+            # The public recovery API uses the heartbeat column; age the row in
+            # a controlled fixture to model a process killed with the terminal.
+            with store._connection() as connection:
+                connection.execute("UPDATE jobs SET heartbeat_at=? WHERE id=?", (time.time() - 100, job["id"]))
+            self.assertEqual(store.recover_stale_jobs(45), 1)
+            recovered = store.job(job["id"])
+            self.assertEqual(recovered["status"], "queued")
+            self.assertEqual(recovered["worker_id"], "")
 
     def test_native_ai_client_streams_sse_without_api_key_for_free(self) -> None:
         from yteam_ai import stream_chat
@@ -263,6 +281,8 @@ class StandaloneYteamTests(unittest.TestCase):
         installer = (SCRIPTS / "install_yteam.py").read_text(encoding="utf-8")
         self.assertIn('ROOT / "runtime" / ".venv"', installer)
         self.assertIn("yteam_tui.py", installer)
+        self.assertIn("yteam_control.py", installer)
+        self.assertIn("yteam_worker.py", installer)
         self.assertIn("yteam_control.py", installer)
         self.assertNotIn("bootstrap_sources", installer)
         self.assertNotIn("full-sources", installer)

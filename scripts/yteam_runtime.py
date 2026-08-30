@@ -73,9 +73,10 @@ class YteamRuntime:
         self.config = load_model_config(root)
         self.models = discover_free_models()
         self.selected_model = self.config["model"] if self.config["model"] in self.models else self.models[0]
-        self.session = Session(self.runtime_dir / "sessions")
+        self.session = Session.resume_or_new(self.runtime_dir / "sessions")
         self.memory = LearningMemory(self.runtime_dir / "memory" / "learning.jsonl")
         self.events = EventLedger(self.runtime_dir / "events.jsonl")
+        self.state = StateStore(self.runtime_dir / "state.db")
         self.policy = RuntimePolicy()
         self.pending_bb_target: str | None = None
         self.quit_requested = False
@@ -87,6 +88,7 @@ class YteamRuntime:
             "/clear": lambda _: self.clear_text(),
             "/memory": lambda _: self.memory_text(),
             "/events": lambda _: self.events_text(),
+            "/jobs": lambda _: self.jobs_text(),
         }
 
     def help_text(self) -> str:
@@ -98,6 +100,7 @@ class YteamRuntime:
             "/clear                   start a fresh local conversation",
             "/memory                 show verified lessons and pending proposals",
             "/events                  show the latest replayable runtime events",
+            "/jobs                    show durable assessment jobs and checkpoints",
             "/learn <lesson>          propose a redacted lesson for verification",
             "/verify <proposal-id>    promote one proposal into verified context",
             "/bb <authorized-target> run the scoped read-only security pipeline",
@@ -113,6 +116,7 @@ class YteamRuntime:
 
     def status_text(self) -> str:
         counts = self.events.store.counts(self.events.aggregate_id)
+        jobs = self.state.list_jobs(limit=8)
         return json.dumps({
             "product": "YTEAM",
             "runtime": "standalone",
@@ -123,6 +127,7 @@ class YteamRuntime:
             "event_count": counts["events"],
             "memory": self.memory.summary(),
             "policy": self.policy.__dict__,
+            "jobs": [{"id": job["id"], "status": job["status"], "phase": job["phase"], "target": job["target"]} for job in jobs],
         }, indent=2)
 
     def history_text(self) -> str:
@@ -131,7 +136,7 @@ class YteamRuntime:
         return "\n".join(f"{item['role']}: {item['content'][:160]}" for item in self.session.messages[-12:])
 
     def clear_text(self) -> str:
-        self.session = Session(self.runtime_dir / "sessions")
+        self.session = Session(self.runtime_dir / "sessions", state_path=self.runtime_dir / "state.db")
         self.events.emit("session.cleared", self.session.session_id)
         return f"Started fresh session: {self.session.session_id}"
 
@@ -150,6 +155,12 @@ class YteamRuntime:
         if not events:
             return "No runtime events recorded."
         return "\n".join(f"#{item['sequence']} {item['kind']}: {item['detail']}" for item in events)
+
+    def jobs_text(self) -> str:
+        jobs = self.state.list_jobs(limit=12)
+        if not jobs:
+            return "No durable assessment jobs."
+        return "\n".join(f"{item['id']} [{item['status']}/{item['phase']}] {item['target']} attempt={item['attempt']}" for item in jobs)
 
     def learn(self, value: str) -> str:
         try:
@@ -179,9 +190,9 @@ class YteamRuntime:
         target = value.strip()
         if not target or target.startswith("-") or any(char in target for char in "\r\n"):
             return "Usage: /bb <authorized-http(s)-target>"
-        self.pending_bb_target = target
-        self.events.emit("bb.requested", target)
-        return f"Queued read-only authorized assessment: {target}"
+        job = self.state.create_job(target, {"depth": 2, "rate": self.policy.max_requests_per_second, "use_external": False, "scan": False})
+        self.events.emit("bb.admitted", str(job["id"]), {"target": target, "job_id": job["id"]})
+        return f"Queued durable read-only assessment {job['id']}: {target}\nThe worker will resume it after a terminal close."
 
     def command(self, message: str) -> str | None:
         message = message.strip()

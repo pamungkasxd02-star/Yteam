@@ -73,6 +73,15 @@ Each durable event has an aggregate ID, monotonically increasing sequence,
 event ID, timestamp, type, and redacted payload. Live subscribers may be
 lossy; the durable event store is replayable.
 
+## Durable job execution
+
+Assessment work is admitted to the `jobs` table before a network request is
+made. A worker claims a queued job with a lease, persists the underlying
+pipeline run ID, updates a heartbeat, and stores a bounded result/error. On
+startup, stale running leases are returned to the queue. This makes the TUI a
+replaceable client: closing it does not cancel the hunt, and reopening it can
+render the same job/session state.
+
 ## Memory lifecycle
 
 ```text

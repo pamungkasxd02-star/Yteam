@@ -74,11 +74,11 @@ class ControlPlane:
         if result is None:
             return "Unknown or unavailable remote command. Use /help."
         self.events.emit("control.executed", f"{provider}:{actor}:{text.split()[0]}")
-        if self.runtime.pending_bb_target and self.executor:
-            target = self.runtime.pending_bb_target
-            self.runtime.pending_bb_target = None
-            threading.Thread(target=self.executor, args=(target,), daemon=True).start()
-            result += "\nAssessment started in the background; poll /status for local state."
+        if text.startswith("/bb "):
+            from yteam_worker import ensure_worker
+
+            ensure_worker(self.root)
+            result += "\nAssessment admitted to the durable worker; poll /status or /jobs."
         return result[:3800]
 
     def start_telegram(self) -> threading.Thread | None:

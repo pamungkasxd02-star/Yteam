@@ -29,7 +29,7 @@ python3 scripts/install_yteam.py --skip-browser-download
 ```
 
 The installer creates `runtime/.venv`, installs `requirements.txt`, and places
-a user-local `yteam` launcher. Omit `--skip-browser-download` if the optional
+user-local `yteam`, `yteam-control`, and `yteam-worker` launchers. Omit `--skip-browser-download` if the optional
 Camoufox browser observer is required.
 
 Preview the plan without changing anything:
@@ -61,6 +61,7 @@ Commands:
 /verify <proposal-id>         verify a lesson for future prompt context
 /doctor                       run local diagnostics
 /bb <authorized-http-target>  run the scoped read-only assessment
+/jobs                         show durable jobs/checkpoints
 /quit                         exit
 ```
 
@@ -75,6 +76,30 @@ scope → inventory → baseline → bounded crawl → route mining
 The pipeline is fail-closed, low-rate, read-only by default, and never
 auto-submits a report. Recon signals, scanner matches, and hypotheses are not
 findings until reproducible impact and triage gates pass.
+
+### Durable autonomous hunting
+
+`/bb` is a durable job admission, not a foreground-only command. YTEAM writes
+the target, parameters, attempt number, pipeline run ID, current phase,
+heartbeat, result, and error state to `runtime/state.db` before work begins.
+The detached `yteam-worker` claims jobs with a lease and checkpoints the
+pipeline ledger. If the terminal closes, the worker continues; if the worker
+dies, the next YTEAM startup requeues stale jobs and resumes the saved pipeline
+run instead of starting a duplicate hunt. Use `/jobs` or `/status` to inspect
+the durable queue.
+
+The worker is intentionally one bounded assessment at a time and inherits the
+same read-only/scope policy. It does not turn a terminal close into permission
+to access customer objects, run destructive tests, or submit reports.
+
+You can also run the worker explicitly as a service:
+
+```text
+yteam-worker
+```
+
+The TUI starts it automatically when needed; running it manually is useful for
+an always-on host where the terminal is only a display client.
 
 ## Model configuration
 
