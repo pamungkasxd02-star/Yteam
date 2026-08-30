@@ -1,5 +1,5 @@
 # Local runtime and generated assessment data
-runtime/
+/runtime/
 *.log
 *.stderr.txt
 *.stdout.txt
@@ -19,9 +19,9 @@ venv/
 # Credentials and private local profile state
 .env
 profile/.env
-runtime/yteam-home/
-runtime/yteam-model.yaml
-runtime/yteam-model.local.yaml
+/runtime/yteam-home/
+/runtime/yteam-model.yaml
+/runtime/yteam-model.local.yaml
 yteam.local.yaml
 auth.json
 auth.lock
@@ -30,11 +30,11 @@ playwright-cache/
 .camoufox/
 
 # Engagement-local artifacts must never be published by default
-reports/
-evidence/
-recon/
-secrets/
-packs/
+/reports/
+/evidence/
+/recon/
+/secrets/
+/packs/
 
 # Local dependency trees / build output
 node_modules/
