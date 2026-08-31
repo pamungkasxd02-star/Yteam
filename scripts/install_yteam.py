@@ -286,7 +286,7 @@ def persist_user_path(destination: Path) -> tuple[bool, str]:
         return False, f'export PATH="{destination}:$PATH"'
 
 
-def install_dependencies(uv: str | None, fetch_browser: bool) -> str:
+def install_dependencies(uv: str | None, fetch_browser: bool) -> tuple[str, str]:
     backend = "uv" if uv else "pip"
     if not python_in_venv().exists():
         VENV.parent.mkdir(parents=True, exist_ok=True)
@@ -307,11 +307,18 @@ def install_dependencies(uv: str | None, fetch_browser: bool) -> str:
         env = os.environ.copy()
         env["PLAYWRIGHT_BROWSERS_PATH"] = str(ROOT / "runtime" / "cache" / "playwright")
         env["CAMOUFOX_CACHE_DIR"] = str(cache)
-        run_command([str(python_in_venv()), "-m", "camoufox", "fetch"], cwd=ROOT, env=env)
-    return backend
+        try:
+            run_command([str(python_in_venv()), "-m", "camoufox", "fetch"], cwd=ROOT, env=env)
+            browser_status = "installed"
+        except RuntimeError as error:
+            browser_status = "deferred"
+            print(f"Warning: browser data belum berhasil diunduh ({error}). Runtime inti tetap terpasang; jalankan 'yteam-doctor' atau install ulang dengan jaringan siap.", file=sys.stderr)
+    else:
+        browser_status = "skipped"
+    return backend, browser_status
 
 
-def write_install_manifest(destination: Path, backend: str, browser: bool) -> None:
+def write_install_manifest(destination: Path, backend: str, browser: bool, browser_status: str) -> None:
     manifest = {
         "product": "YTEAM",
         "schema_version": 1,
@@ -322,6 +329,7 @@ def write_install_manifest(destination: Path, backend: str, browser: bool) -> No
         "launcher_dir": str(destination),
         "package_backend": backend,
         "browser_data_requested": browser,
+        "browser_data_status": browser_status,
     }
     INSTALL_MANIFEST.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(INSTALL_MANIFEST, json.dumps(manifest, indent=2, sort_keys=True) + "\n")
@@ -337,14 +345,14 @@ def setup(args: argparse.Namespace) -> Path:
     validate_python()
     uv = ensure_uv()
     browser_requested = not args.skip_browser_download
-    backend = install_dependencies(uv, browser_requested)
+    backend, browser_status = install_dependencies(uv, browser_requested)
     destination = (args.bin_dir or default_bin()).resolve()
     path = install(destination)
     control_path = install_control(destination)
     worker_path = install_worker(destination)
     localsolver_path = install_localsolver(destination)
     mcp_path = install_mcp(destination)
-    write_install_manifest(destination, backend, browser_requested)
+    write_install_manifest(destination, backend, browser_requested, browser_status)
     print(f"Installed YTEAM launcher: {path}")
     print(f"Installed YTEAM control launcher: {control_path}")
     print(f"Installed YTEAM worker launcher: {worker_path}")
@@ -358,7 +366,7 @@ def setup(args: argparse.Namespace) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bin-dir", type=Path, help="User-local bin directory")
-    parser.add_argument("--skip-browser-download", action="store_true", help="Install all Python packages but skip Camoufox browser data download")
+    parser.add_argument("--skip-browser-download", "--no-browser", dest="skip_browser_download", action="store_true", help="Install Python packages without downloading Camoufox browser data")
     parser.add_argument("--dry-run", action="store_true", help="Show setup plan without downloading or modifying anything")
     args = parser.parse_args()
     try:

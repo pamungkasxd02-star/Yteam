@@ -485,6 +485,7 @@ class StandaloneYteamTests(unittest.TestCase):
         self.assertIn("persist_user_path", installer)
         self.assertIn("falling back to the standard-library venv + pip backend", installer)
         self.assertIn("install-manifest.json", installer)
+        self.assertIn('"--no-browser"', installer)
         self.assertTrue((ROOT / "install.py").exists())
         self.assertTrue((ROOT / "install.sh").exists())
         self.assertTrue((ROOT / "install.ps1").exists())
@@ -511,6 +512,7 @@ class StandaloneYteamTests(unittest.TestCase):
         bootstrap = (ROOT / "install.py").read_text(encoding="utf-8")
         self.assertIn("YTEAM_HOME", bootstrap)
         self.assertIn("--depth", bootstrap)
+        self.assertIn("select_python", bootstrap)
 
     def test_opencode_style_tui_constructs_both_visual_states(self) -> None:
         from yteam_runtime import YteamRuntime

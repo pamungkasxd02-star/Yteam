@@ -19,6 +19,41 @@ from pathlib import Path
 
 REPOSITORY = "https://github.com/pamungkasxd02-star/Yteam.git"
 SCRIPT_ROOT = Path(__file__).resolve().parent
+SUPPORTED_PYTHON = {(3, 11), (3, 12), (3, 13)}
+
+
+def _supported(command: list[str]) -> bool:
+    try:
+        result = subprocess.run(
+            [*command, "-c", "import sys; print(sys.version_info[:2])"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.returncode == 0 and str(result.stdout.strip()) in {str(version) for version in SUPPORTED_PYTHON}
+    except OSError:
+        return False
+
+
+def select_python() -> list[str]:
+    """Find a supported Python even when the invoking `python` is too old."""
+    current = [sys.executable]
+    if _supported(current):
+        return current
+    configured = os.environ.get("YTEAM_PYTHON")
+    candidates: list[list[str]] = []
+    if configured:
+        candidates.append([configured])
+    if os.name == "nt":
+        candidates.extend([["py", f"-{major}.{minor}"] for major, minor in sorted(SUPPORTED_PYTHON, reverse=True)])
+    candidates.extend([[f"python{major}.{minor}"] for major, minor in sorted(SUPPORTED_PYTHON, reverse=True)])
+    candidates.append(["python3"])
+    candidates.append(["python"])
+    for candidate in candidates:
+        if _supported(candidate):
+            return candidate
+    supported = ", ".join(f"{major}.{minor}" for major, minor in sorted(SUPPORTED_PYTHON))
+    raise RuntimeError(f"Python {supported} tidak ditemukan. Install salah satu versi tersebut lalu jalankan lagi.")
 
 
 def default_checkout() -> Path:
@@ -64,7 +99,7 @@ def main() -> int:
         root = checkout((args.repo_dir or default_checkout()).resolve(), args.dry_run)
         if args.dry_run and not (root / "scripts" / "install_yteam.py").exists():
             return 0
-        command = [sys.executable, str(root / "scripts" / "install_yteam.py"), *forwarded]
+        command = [*select_python(), str(root / "scripts" / "install_yteam.py"), *forwarded]
         if args.dry_run:
             command.append("--dry-run")
         run(command, cwd=root)

@@ -50,8 +50,10 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/pamungkasxd02-star/Yteam/main/install.ps1 | iex
 ```
 
-Set `YTEAM_HOME` to choose another checkout location. Use
-`--skip-browser-download` when browser observation is not needed.
+Set `YTEAM_HOME` to choose another checkout location. The bootstrapper
+automatically selects an installed Python 3.11, 3.12, or 3.13—even when the
+OS default `python` is older. Use `--skip-browser-download` (or the shorter
+`--no-browser`) when browser observation is not needed.
 
 ### Windows PowerShell
 
@@ -105,7 +107,10 @@ python scripts/install_yteam.py --skip-browser-download
 ```
 
 Python dependencies are pinned in `requirements.txt`. On Linux, Camoufox may
-also need system browser libraries; see `REQUIREMENTS.md`.
+also need system browser libraries; see `REQUIREMENTS.md`. If browser data
+cannot be downloaded, the core runtime still finishes installing and records
+the result in `runtime/install-manifest.json`; run `yteam-doctor` after fixing
+network or system-library issues.
 
 ## TUI
 
