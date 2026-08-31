@@ -242,6 +242,64 @@ class EngineSkillResolverTests(unittest.TestCase):
             resolver.resolve("evil-shell")
 
 
+class EngineContextGuardTests(unittest.TestCase):
+    def _messages(self, count: int) -> list[dict[str, str]]:
+        return [
+            {"role": "user" if i % 2 == 0 else "assistant", "content": f"Turn number {i} with some reasonably long conversational content to estimate tokens for the context guard window management across a long session."}
+            for i in range(count)
+        ]
+
+    def test_estimate_is_deterministic(self) -> None:
+        from yteam_engine.context_guard import estimate_tokens
+
+        text = "hello world this is a test"
+        self.assertEqual(estimate_tokens(text), estimate_tokens(text))
+        self.assertGreater(estimate_tokens(text), 0)
+
+    def test_ok_below_warning(self) -> None:
+        from yteam_engine.context_guard import ContextGuard, GuardConfig
+
+        guard = ContextGuard(GuardConfig(context_window=1_000_000))
+        verdict = guard.check(self._messages(10))
+        self.assertEqual(verdict.level, "ok")
+        self.assertFalse(verdict.compaction_applied)
+
+    def test_compaction_at_warning_threshold(self) -> None:
+        from yteam_engine.context_guard import ContextGuard, GuardConfig
+
+        guard = ContextGuard(GuardConfig(context_window=2000, warning_ratio=0.5, handoff_ratio=0.9, keep_recent_messages=4))
+        messages = self._messages(40)
+        verdict = guard.check(messages)
+        self.assertEqual(verdict.level, "warning")
+        self.assertTrue(verdict.compaction_applied)
+        self.assertGreater(verdict.compaction_saved_tokens, 0)
+        compacted, _ = guard.compact(messages)
+        self.assertLessEqual(len(compacted), 5)  # 1 summary + 4 recent
+
+    def test_handoff_at_critical_threshold(self) -> None:
+        import tempfile
+
+        from yteam_engine.context_guard import ContextGuard, GuardConfig
+
+        with tempfile.TemporaryDirectory() as directory:
+            guard = ContextGuard(GuardConfig(context_window=1500, warning_ratio=0.2, handoff_ratio=0.3), handoff_dir=Path(directory) / "handoffs")
+            verdict = guard.check(self._messages(40))
+            self.assertEqual(verdict.level, "handoff")
+            self.assertTrue(verdict.handoff_path)
+            self.assertTrue(Path(verdict.handoff_path).exists())
+            self.assertIn("opencode run", verdict.continue_cmd)
+
+    def test_runtime_ctx_command(self) -> None:
+        import tempfile
+
+        from yteam_runtime import YteamRuntime
+
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = YteamRuntime(Path(directory))
+            output = runtime.command("/ctx")
+            self.assertIn("level", output)
+
+
 class EngineBridgeTests(unittest.TestCase):
     def test_make_engine_and_status(self) -> None:
         from yteam_engine import Engine, make_engine

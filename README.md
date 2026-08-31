@@ -240,13 +240,25 @@ A policy-bound orchestration core layered on the standalone runtime:
 | `planner.py` | adaptive recon/attack planner (self-tuning state machine over 18 techniques) |
 | `knowledge.py` | knowledge graph + verified lesson ledger with traversal queries |
 | `skill_resolver.py` | plugin/skill runtime resolver (DI, LRU cache, load policy) |
+| `context_guard.py` | auto-compaction + handoff so long sessions never die at the context window |
 
 Everything fails closed: the default policy is read-only at 1 req/s and denies
 write/report effects until an explicit, validated policy file grants them. The
-TUI exposes the engine via `/engine` (state snapshot) and `/plan <target>`
-(adaptive plan); the durable worker asserts the policy before running a job and
-records outcomes into the knowledge graph. MCP exposes read-only
-`yteam_engine_status` and `yteam_plan` tools.
+TUI exposes the engine via `/engine` (state snapshot), `/plan <target>`
+(adaptive plan), and `/ctx` (context-guard status). The durable worker asserts
+the policy before running a job and records outcomes into the knowledge graph.
+MCP exposes read-only `yteam_engine_status` and `yteam_plan` tools.
+
+### Context Guard (`/ctx`)
+
+The guard estimates the conversation's token usage (deterministic, dependency
+free) and compares it against the model context window with two thresholds:
+75% warning, 85% handoff. At the warning threshold the oldest turns are folded
+into a compacted system summary sent to the model (raw data stays in the SQLite
+store for evidence); at the handoff threshold a Markdown bundle is written under
+`runtime/handoffs/` with a continuation command for a fresh session. This
+mirrors the operator's context-guard policy so an autonomous run does not die
+mid-task at the context wall.
 
 The native gate detector classifies anti-bot/WAF responses and stops or slows
 down safely. It does not solve challenges, evade WAFs, rotate identities, or

@@ -82,6 +82,8 @@ class YteamRuntime:
         self.memory = LearningMemory(self.runtime_dir / "memory" / "learning.jsonl")
         self.events = EventLedger(self.runtime_dir / "events.jsonl")
         self.state = StateStore(self.runtime_dir / "state.db")
+        self._context_guard = None
+        self._guard_meta: dict[str, object] = {}
         self.profile_prompt = self._load_profile_prompt()
         self.policy = RuntimePolicy()
         self.pending_bb_target: str | None = None
@@ -98,6 +100,7 @@ class YteamRuntime:
             "/skills": lambda _: self.skills_text(),
             "/engine": lambda _: self.engine_text(),
             "/plan": lambda _: self.plan_text(""),
+            "/ctx": lambda _: self.ctx_text(),
         }
 
     def _load_profile_prompt(self) -> str:
@@ -122,6 +125,7 @@ class YteamRuntime:
             "/skills                  show indexed skill/risk summary",
             "/engine                  show policy, scheduler, planner, knowledge, resolver state",
             "/plan <target>           build an adaptive recon/attack plan for an authorized target",
+            "/ctx                     show context-guard status (auto-compaction + handoff)",
             "/learn <lesson>          propose a redacted lesson for verification",
             "/verify <proposal-id>    promote one proposal into verified context",
             "/bb <authorized-target> run the scoped read-only security pipeline",
@@ -214,6 +218,34 @@ class YteamRuntime:
             return "No plan steps are allowed under the active policy for this target."
         return json.dumps({"target": state.target, "plan": plan_to_dict(plan), "note": "Plan is guidance; execute only against authorized targets under scope/rate policy."}, indent=2)
 
+    def _guard(self):
+        if self._context_guard is None:
+            from yteam_engine import ContextGuard, GuardConfig
+
+            handoff_dir = self.runtime_dir / "handoffs"
+            self._context_guard = ContextGuard(GuardConfig(), handoff_dir=handoff_dir, product="YTEAM")
+        return self._context_guard
+
+    def ctx_text(self) -> str:
+        guard = self._guard()
+        messages = self.session.messages
+        verdict = guard.check(messages, meta=self._guard_meta, allow_handoff=True)
+        return json.dumps(verdict.as_dict(), indent=2)
+
+    def guard_conversation(self) -> tuple[list[dict[str, str]], str | None]:
+        """Run the context guard over the session. Returns (messages, warning)."""
+        guard = self._guard()
+        messages = self.session.messages
+        verdict = guard.check(messages, meta=self._guard_meta, allow_handoff=True)
+        self.events.emit("context.guard", verdict.level, {"tokens": verdict.estimated_tokens, "ratio": round(verdict.used_ratio, 4)})
+        if verdict.compaction_applied:
+            self.events.emit("context.compacted", f"saved {verdict.compaction_saved_tokens} tokens", {"saved": verdict.compaction_saved_tokens})
+            return messages, f"[context compacted: saved ~{verdict.compaction_saved_tokens} tokens]"
+        if verdict.level == "handoff":
+            self.events.emit("context.handoff", verdict.handoff_path)
+            return messages, f"[context at handoff threshold: {verdict.handoff_path}\nContinue: {verdict.continue_cmd}]"
+        return messages, None
+
     def learn(self, value: str) -> str:
         try:
             item = self.memory.propose(value, source="runtime-command")
@@ -277,9 +309,18 @@ class YteamRuntime:
     def answer_stream(self, message: str):
         self.session.append("user", message)
         self.events.emit("chat.requested", self.selected_model)
+        guard_warning = self.guard_conversation()[1]
+        history = self.session.conversation()
+        # Apply prompt-side compaction when the guard flags it.
+        guard = self._guard()
+        if guard.ratio(history) >= guard.config.warning_ratio and len(history) > guard.config.keep_recent_messages:
+            history, _ = guard.compact(history)
         prompt = [{"role": "system", "content": self.profile_prompt + "\n\nUse only verified lessons as prior knowledge; treat proposals and hypotheses as unverified. Follow the active safety policy and never invent evidence.\n\nVerified YTEAM lessons:\n" + self.memory.context(message)}]
-        prompt.extend(self.session.conversation())
+        prompt.extend(history)
         chunks: list[str] = []
+        if guard_warning:
+            # Surface the guard notice to the user without storing it as a turn.
+            chunks.append("\n[guard] " + guard_warning + "\n\n")
         try:
             for event in stream_chat_events({**self.config, "model": self.selected_model}, prompt):
                 kind = str(event.get("type", ""))

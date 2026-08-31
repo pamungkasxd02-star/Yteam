@@ -25,12 +25,23 @@ from .planner import AdaptivePlanner, PlannerState, StepResult, plan_to_dict
 from .policy import Policy, PolicyError, PolicyViolation, ResolvedBudget
 from .scheduler import Scheduler, Admission, TargetEntry
 from .skill_resolver import SkillResolver, SkillResolutionError
+from .context_guard import (
+    ContextGuard,
+    GuardConfig,
+    GuardVerdict,
+    estimate_conversation_tokens,
+    estimate_message_tokens,
+    estimate_tokens,
+)
 
 __all__ = [
     "AdaptivePlanner",
     "Admission",
+    "ContextGuard",
     "Engine",
     "GraphRun",
+    "GuardConfig",
+    "GuardVerdict",
     "KnowledgeError",
     "KnowledgeGraph",
     "NodeOutcome",
@@ -49,6 +60,9 @@ __all__ = [
     "build_default_policy",
     "default_policy_path",
     "engine_status",
+    "estimate_conversation_tokens",
+    "estimate_message_tokens",
+    "estimate_tokens",
     "make_engine",
     "plan_to_dict",
     "run_graph_to_dict",
