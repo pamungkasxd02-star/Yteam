@@ -10,8 +10,9 @@ if (-not $python) {
 if (Test-Path (Join-Path $PSScriptRoot "install.py")) {
     & $python.Source (Join-Path $PSScriptRoot "install.py") @args
 } else {
-    $ref = if ($env:YTEAM_REF) { $env:YTEAM_REF } else { "main" }
-    $bootstrapUrl = "https://raw.githubusercontent.com/pamungkasxd02-star/Yteam/$ref/install.py"
+    $ref = if ($env:YTEAM_REF) { $env:YTEAM_REF } else { "codex/autonomy-core-v1" }
+    $env:YTEAM_REF = $ref
+    $bootstrapUrl = "https://raw.githubusercontent.com/pamungkasxd02-star/Yteam/refs/heads/$ref/install.py"
     $code = (Invoke-WebRequest -UseBasicParsing $bootstrapUrl).Content
     & $python.Source -c $code -- @args
 }
