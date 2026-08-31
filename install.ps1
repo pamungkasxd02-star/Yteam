@@ -10,7 +10,8 @@ if (-not $python) {
 if (Test-Path (Join-Path $PSScriptRoot "install.py")) {
     & $python.Source (Join-Path $PSScriptRoot "install.py") @args
 } else {
-    $bootstrapUrl = "https://raw.githubusercontent.com/pamungkasxd02-star/Yteam/main/install.py"
+    $ref = if ($env:YTEAM_REF) { $env:YTEAM_REF } else { "main" }
+    $bootstrapUrl = "https://raw.githubusercontent.com/pamungkasxd02-star/Yteam/$ref/install.py"
     $code = (Invoke-WebRequest -UseBasicParsing $bootstrapUrl).Content
     & $python.Source -c $code -- @args
 }

@@ -17,9 +17,8 @@ import sys
 from pathlib import Path
 
 
-REPOSITORY = os.environ.get("YTEAM_REPOSITORY", "https://github.com/pamungkasxd02-star/Yteam.git")
-REPOSITORY_REF = os.environ.get("YTEAM_REF")
-SCRIPT_ROOT = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
+REPOSITORY = "https://github.com/pamungkasxd02-star/Yteam.git"
+SCRIPT_ROOT = Path(__file__).resolve().parent
 SUPPORTED_PYTHON = {(3, 11), (3, 12), (3, 13)}
 
 
@@ -87,11 +86,7 @@ def checkout(target: Path, dry_run: bool) -> Path:
             print(f"Would clone {REPOSITORY} into {target}")
             return target
         target.parent.mkdir(parents=True, exist_ok=True)
-        command = [git, "clone", "--depth", "1"]
-        if REPOSITORY_REF:
-            command.extend(["--branch", REPOSITORY_REF])
-        command.extend([REPOSITORY, str(target)])
-        run(command)
+        run([git, "clone", "--depth", "1", REPOSITORY, str(target)])
     return target
 
 
