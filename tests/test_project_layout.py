@@ -89,8 +89,8 @@ class StandaloneYteamTests(unittest.TestCase):
         config = (ROOT / "profile" / "config.yaml").read_text(encoding="utf-8")
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("mode: standalone", config)
-        self.assertIn("/bb <authorized-http-target>", readme)
-        self.assertIn("no required vendored agent", readme)
+        self.assertIn("/bb <target>", readme)
+        self.assertIn("does not require Bun", readme)
         self.assertIn("YTEAM Requirements", (ROOT / "REQUIREMENTS.md").read_text(encoding="utf-8"))
 
     def test_no_legacy_runtime_references_in_executable_source(self) -> None:

@@ -1,22 +1,42 @@
 # YTEAM
 
-YTEAM is a standalone, local-first security-research workbench. It owns its
-native Python terminal UI, policy engine, JSONL session store, append-only event
-ledger, model client, skill registry, bounded recon pipeline, hypothesis
-planner, evidence hygiene, and multi-pillar assessment DAG.
+YTEAM is a local-first security-research workbench for authorized testing. It
+combines a terminal agent UI, a small durable runtime, explicit scope and
+safety policy, bounded recon, browser observation, and local evidence/state
+storage.
 
-There is **no required vendored agent runtime, external UI, Bun installation,
-or global tool mutation**. YTEAM can use an OpenAI-compatible model endpoint,
-including the keyless Zen Free catalog, while keeping local sessions and
-assessment artifacts under `runtime/`.
+The project is self-contained. It does not require Bun, an upstream agent
+runtime, a vendored source tree, or a global installation. Runtime data stays
+under the ignored `runtime/` directory; source code, tests, and reviewed
+first-party skills are kept in the repository.
+
+> **Authorized use only.** Use YTEAM only against assets covered by written
+> permission, such as a HackerOne, Bugcrowd, Intigriti, QA, or internal test
+> engagement. The default workflow is read-only, low-rate, scoped, and does not
+> submit reports automatically.
+
+## What is included
+
+- Full-screen OpenCode-style TUI built with `prompt_toolkit`.
+- OpenAI-compatible streaming client with a keyless Zen Free default.
+- SQLite WAL state for sessions, messages, events, and durable jobs.
+- Fail-closed target validation and local runtime policy.
+- Bounded read-only recon pipeline with evidence and non-claim tracking.
+- LocalSolver: allowlisted browser observation using Camoufox.
+- Native stdio MCP server exposing read-only YTEAM tools.
+- First-party skill registry with risk classification and on-demand loading.
+- Durable worker with leases, heartbeat, stale-job recovery, and retries.
+- Composable engine: policy, DAG graph, scheduler, adaptive planner, knowledge
+  graph, skill resolver, and context guard.
+- Local redaction, secret scanning, stream filtering, and report aggregation.
 
 ## Install
 
-### Windows
+### Windows PowerShell
 
 ```powershell
 git clone https://github.com/pamungkasxd02-star/Yteam.git Yteam
-cd Yteam
+Set-Location Yteam
 python scripts\install_yteam.py
 ```
 
@@ -28,111 +48,143 @@ cd yteam
 python3 scripts/install_yteam.py
 ```
 
-The installer creates `runtime/.venv`, installs every Python package pinned in
-`requirements.txt`, fetches Camoufox browser data into `runtime/cache/`, and
-installs `yteam`, `yteam-control`, `yteam-worker`, `localsolver`, and
-`yteam-mcp` launchers. Use `--skip-browser-download` only when installing in CI
-or when browser data has already been fetched.
+The installer creates `runtime/.venv`, installs the pinned packages from
+`requirements.txt`, optionally downloads Camoufox browser data into the
+runtime cache, and creates user-local launchers for:
 
-Preview the plan without changing anything:
+```text
+yteam          TUI
+yteam-control  signed local remote-control adapter
+yteam-worker   durable assessment worker
+localsolver    browser-observation service
+yteam-mcp      read-only MCP server
+```
+
+Preview the installation without changing files:
 
 ```text
 python scripts/install_yteam.py --dry-run
 ```
 
-## Native TUI
+Skip only browser-data download when the browser is already available or when
+installing in CI:
 
-Start it with:
+```text
+python scripts/install_yteam.py --skip-browser-download
+```
+
+Python dependencies are pinned in `requirements.txt`. On Linux, Camoufox may
+also need system browser libraries; see `REQUIREMENTS.md`.
+
+## TUI
+
+Start the default full-screen interface:
 
 ```text
 yteam
 ```
 
-Commands:
+The initial state is a centered composer:
 
 ```text
-/help                         show commands
-/models                       discover/list Zen Free models
-/model <model-id>             select a model
-/status                       show policy/session/runtime state
-/history                      show the current bounded conversation
-/clear                        create a fresh local session
-/memory                       show verified lessons and pending proposals
-/events                       show replayable runtime events
-/learn <lesson>               propose a lesson for verification
-/verify <proposal-id>         verify a lesson for future prompt context
-/doctor                       run local diagnostics
-/bb <authorized-http-target>  run the scoped read-only assessment
-/jobs                         show durable jobs/checkpoints
-/skills                       show full skill/risk/source summary
-/engine                       show policy/scheduler/planner/knowledge state
-/plan <authorized-target>    build an adaptive read-only plan
-/ctx                          show context usage/compaction/handoff state
-/quit                         exit
+                 YTEAM
+
+        ┌─────────────────────────────┐
+        │ Ask anything...              │
+        │ Bb auto · <model> YTEAM      │
+        └─────────────────────────────┘
+             tab agents  ctrl+p commands
 ```
 
-The default TUI is a full-screen OpenCode-style workspace implemented with
-`prompt_toolkit`. Before the first message it shows a centered YTEAM logo,
-composer, active model, shortcut hints, tip, working directory, MCP status, and
-version. After the first message it changes to the working layout:
+After the first message, it becomes a workspace with the transcript on the
+left and a persistent information rail on the right:
 
 ```text
 ┌──────────────────────────────────────────────┬─────────────────────┐
 │                                              │ YTEAM Security Agent│
 │              session transcript              │ Context             │
-│   user prompts, streamed answers, JSON/logs   │ MCP / LSP           │
+│      prompts, streamed answers, and logs      │ MCP status          │
 │                                              │ Memory              │
-│                                              │ working directory   │
-│  ▌ composer: Ask anything...                 │                     │
-│    Bb auto · <model> YTEAM                   │                     │
+│  ▌ Ask anything...                           │ working directory   │
+│    Bb auto · <model> YTEAM                   │ version             │
 │  esc interrupt              ctrl+p commands  │                     │
 └──────────────────────────────────────────────┴─────────────────────┘
 ```
 
-`Enter` submits, `Ctrl+J` inserts a newline, arrow keys use input history,
-`Ctrl+P` opens the slash-command palette, `PageUp/PageDown` scroll the
-transcript, and `Escape` interrupts an active model stream. `--plain` remains
-available for pipes, CI, and non-interactive SSH sessions.
+The visual style is implemented independently; no upstream UI source is
+required. Controls:
 
-`/bb` drives the native pipeline:
+| Key | Action |
+|---|---|
+| `Enter` | Submit the current prompt |
+| `Ctrl+J` | Insert a newline in the composer |
+| `Arrow Up/Down` | Navigate prompt history |
+| `Ctrl+P` | Open the command palette |
+| `/` | Start slash-command completion |
+| `PageUp/PageDown` | Move transcript scroll position |
+| `Escape` | Interrupt an active model stream |
+| `Ctrl+C` | Exit |
+
+For pipes, CI, or a terminal without interactive support:
 
 ```text
-scope → inventory → baseline → bounded crawl → route mining
-      → skill selection → hidden-surface hypotheses → intelligence
-      → evidence manifest → triage handoff
+python scripts/yteam_tui.py --plain
 ```
 
-The pipeline is fail-closed, low-rate, read-only by default, and never
-auto-submits a report. Recon signals, scanner matches, and hypotheses are not
-findings until reproducible impact and triage gates pass.
+## Runtime commands
 
-### Durable autonomous hunting
+Inside the TUI:
 
-`/bb` is a durable job admission, not a foreground-only command. YTEAM writes
-the target, parameters, attempt number, pipeline run ID, current phase,
-heartbeat, result, and error state to `runtime/state.db` before work begins.
-The detached `yteam-worker` claims jobs with a lease and checkpoints the
-pipeline ledger. If the terminal closes, the worker continues; if the worker
-dies, the next YTEAM startup requeues stale jobs and resumes the saved pipeline
-run instead of starting a duplicate hunt. Use `/jobs` or `/status` to inspect
-the durable queue.
+| Command | Purpose |
+|---|---|
+| `/help` | Show commands |
+| `/models` | Discover the available Zen Free models |
+| `/model <id>` | Select a model |
+| `/status` | Show runtime, policy, session, engine, and job state |
+| `/history` | Show recent conversation messages |
+| `/clear` | Start a fresh local session |
+| `/memory` | Show verified lessons and pending proposals |
+| `/learn <text>` | Store a redacted lesson proposal |
+| `/verify <id>` | Promote a proposal to verified memory |
+| `/events` | Show replayable runtime events |
+| `/jobs` | Show durable assessment jobs |
+| `/skills` | Show skill count and risk summary |
+| `/engine` | Show engine policy, planner, scheduler, graph, and cache state |
+| `/plan <target>` | Generate a policy-bound adaptive plan |
+| `/ctx` | Show context usage, compaction, and handoff state |
+| `/doctor` | Run local diagnostics |
+| `/bb <target>` | Queue a scoped read-only assessment |
+| `/quit` | Exit |
 
-The worker is intentionally one bounded assessment at a time and inherits the
-same read-only/scope policy. It does not turn a terminal close into permission
-to access customer objects, run destructive tests, or submit reports.
+## Durable assessment worker
 
-You can also run the worker explicitly as a service:
+`/bb` writes a job to `runtime/state.db`. The worker claims jobs with a lease,
+updates a heartbeat, checkpoints the pipeline ledger, retries transient errors,
+and recovers stale jobs after a process failure.
 
 ```text
 yteam-worker
+python scripts/yteam_worker.py --once
 ```
 
-The TUI starts it automatically when needed; running it manually is useful for
-an always-on host where the terminal is only a display client.
+The worker does not submit reports, access customer objects, or enable
+destructive actions. The job output and pipeline records remain local.
+
+## Context guard
+
+Long conversations are protected by `src/yteam_engine/context_guard.py`:
+
+- below 75% of the configured context window: normal operation;
+- at 75%: the oldest turns are folded into a prompt-side summary;
+- at 85%: a Markdown handoff is written to `runtime/handoffs/` with a
+  continuation command for a fresh session.
+
+The SQLite message history is not deleted. Compaction only changes what is sent
+to the model. Use `/ctx` to inspect the current estimate.
 
 ## Model configuration
 
-The default is keyless Zen Free:
+The default configuration is keyless Zen Free:
 
 ```yaml
 provider: zen-free
@@ -141,58 +193,24 @@ api_key: ""
 base_url: "https://opencode.ai/zen/v1"
 ```
 
-To override it, copy `yteam.local.example.yaml` to `yteam.local.yaml`. The
-local file is ignored by Git; its API key is held in memory and is never written
-to sessions, event logs, or generated assessment artifacts. `/models` refreshes
-the live catalog and falls back to a bundled list when the endpoint is offline.
-
-The native client sends standard OpenAI-compatible `POST /chat/completions`
-requests with SSE streaming. It does not start a gateway or proxy process.
-
-## Remote control
-
-Remote control is opt-in and local-only by default. The installer also creates
-`yteam-control`. It accepts signed webhook commands for Discord and WhatsApp
-bridges and can long-poll Telegram when its token and actor allowlist are set.
-
-```powershell
-$env:YTEAM_CONTROL_SECRET = "use-a-long-random-local-secret"
-$env:YTEAM_TELEGRAM_BOT_TOKEN = "bot-token-from-your-secret-store"
-$env:YTEAM_TELEGRAM_ALLOWLIST = "telegram-chat-id"
-$env:YTEAM_DISCORD_ALLOWLIST = "discord-user-id"
-$env:YTEAM_WHATSAPP_ALLOWLIST = "E.164-sender-id"
-$env:YTEAM_REMOTE_TARGET_ALLOWLIST = "https://authorized-target.example"
-yteam-control
-```
-
-Telegram uses the official Bot API long-polling endpoint. Discord and WhatsApp
-use provider webhooks or a separate bridge that signs the canonical request:
-`METHOD + "\n" + PATH + "\n" + BODY` with HMAC-SHA256 and sends it as
-`X-YTEAM-Signature: sha256=<hex>`. YTEAM does not store bot tokens and does not
-implement either provider's network protocol as a fake in-process client.
-
-Only allowlisted actors can issue commands. `/bb` additionally requires an
-exact target in `YTEAM_REMOTE_TARGET_ALLOWLIST`; `/quit` is permanently blocked
-remotely. Every accepted or denied command is recorded in the runtime event
-ledger. Never send cookies, API keys, passwords, or customer data through a
-chat adapter.
+Copy `yteam.local.example.yaml` to `yteam.local.yaml` for a local override.
+The override is ignored by Git. YTEAM sends standard OpenAI-compatible
+`POST /chat/completions` requests with SSE streaming.
 
 ## LocalSolver
 
-LocalSolver follows the architecture of Boterdrop-Solver—FastAPI, asynchronous
-task queue, Camoufox browser workers, and result polling—but uses the YTEAM name
-and safety contract. It is for allowlisted, authorized browser observation
-during recon. It records response/gate metadata and stores output under
-`runtime/localsolver/`; it does **not** export challenge tokens/cookies, rotate
-proxies/identities, solve CAPTCHAs, or automatically evade WAF policy.
+LocalSolver is an allowlisted browser-observation service for authorized recon.
+It classifies responses and gate metadata through an asynchronous task queue;
+it is not a CAPTCHA solver, proxy rotator, WAF bypass, credential tool, or
+token/cookie exporter.
 
 ```powershell
 $env:LOCALSOLVER_TARGET_ALLOWLIST = "https://authorized-target.example"
-$env:LOCALSOLVER_API_KEY = "optional-key-required-for-non-local-binding"
+$env:LOCALSOLVER_API_KEY = "local-secret"
 localsolver --host 127.0.0.1 --port 8001 --workers 2
 ```
 
-API:
+Endpoints:
 
 ```text
 GET  /health
@@ -201,123 +219,62 @@ GET  /result?id=<task_id>
 GET  /tasks
 ```
 
-`/observe` rejects targets not present in `LOCALSOLVER_TARGET_ALLOWLIST`.
+## Skills and MCP
 
-## First-party skills and MCP
+The repository currently ships five reviewed first-party skills:
 
-YTEAM ships a portable, repository-contained skill catalog. It never reads
-`vendor/` checkouts or machine-specific paths on your laptop; a clean clone is
-fully standalone.
+| Skill | Focus |
+|---|---|
+| `yteam-recon` | Scope-aware, bounded surface mapping |
+| `yteam-authorization` | IDOR/BOLA and role/tenant boundaries |
+| `yteam-injection` | Safe input-boundary canaries |
+| `yteam-reporting` | Evidence, triage, and report quality |
+| `yteam-runtime` | Runtime, state, policy, and worker operation |
 
-```text
-skills/                first-party reviewed SKILL.md playbooks
-skills/catalog.json    portable metadata catalog (union-joined with SKILL.md)
-scripts/yteam_skills.py  registry, risk policy, sections, bundle selection
-scripts/yteam_mcp.py     native MCP stdio server (read-only)
-```
+Skill files live under `skills/<name>/SKILL.md`; `skills/catalog.json` is the
+portable metadata index. YTEAM does not download or require an external skill
+corpus.
 
-The registry union-joins any first-party `SKILL.md` under `skills/` with the
-`catalog.json` metadata index. A real `SKILL.md` always takes precedence; a
-catalog-only entry is metadata-only and never loads a body until a reviewed
-playbook exists. Risk policy keeps high-risk bodies metadata-only unless an
-explicit local override is set. Start the native stdio MCP server with:
+Start the read-only MCP server with:
 
 ```text
 yteam-mcp
 ```
 
-It exposes read-only skill listing/loading, scope validation, Smart Pipe
-filtering, masked secret scanning, and report aggregation. Active network
-assessment remains in the durable `/bb` worker so scope, rate, and audit policy
-cannot be bypassed through MCP.
+It exposes skill metadata/loading, scope validation, stream filtering, masked
+secret scanning, report aggregation, engine status, and plan generation. Active
+network assessment remains in the durable worker.
 
 ## Architecture
 
 ```text
-scripts/yteam_tui.py       terminal UI
-scripts/yteam_runtime.py   commands, policy, events, model/session lifecycle
-scripts/yteam_ai.py        direct OpenAI-compatible SSE client
-scripts/yteam_state.py     SQLite WAL sessions, messages, and event sequences
-scripts/yteam_session.py   session facade over durable state
-scripts/yteam_models.py    local config + live model catalog
+scripts/yteam_tui.py       full-screen TUI and plain fallback
+scripts/yteam_runtime.py   commands, model/session lifecycle, events
+scripts/yteam_state.py     SQLite WAL state and durable jobs
 scripts/yteam_memory.py    verified two-phase learning memory
-scripts/yteam_control.py   signed Telegram/webhook control plane
-scripts/localsolver.py     LocalSolver FastAPI/Camoufox task service
-scripts/yteam_mcp.py       native MCP stdio server (read-only)
-scripts/yteam_skills.py   first-party skill registry, risk, bundles
-scripts/yteam_native_tools.py
-                             smart pipe, secrets, knowledge, reports
-scripts/yteam_hunt.py      scoped web recon and hypothesis handoff
-scripts/yteam_worker.py    durable worker (now policy-gated + knowledge-logging)
-src/local_solver/          detector, Camoufox adapter, task queue, service
-src/yteam_engine/          composable orchestration core (see below)
-skills/                    first-party native playbooks + catalog.json
+scripts/yteam_worker.py    lease-based assessment worker
+scripts/yteam_recon.py     bounded web recon pipeline
+scripts/localsolver.py     browser-observation HTTP service
+scripts/yteam_mcp.py       read-only MCP server
+src/local_solver/          gate detector, browser adapter, queue, service
+src/yteam_engine/          policy, DAG, scheduler, planner, graph, context
+skills/                    reviewed first-party playbooks and catalog
 ```
 
-### Engine (`src/yteam_engine/`)
-
-A policy-bound orchestration core layered on the standalone runtime:
-
-| Module | Purpose |
-|---|---|
-| `policy.py` | schema-validated, deny-by-default policy resolution with per-target budgets |
-| `graph.py` | DAG task-graph executor (topological order, deps, retry, policy gate) |
-| `scheduler.py` | durable multi-target scheduler (priority, per-target token-bucket rate, anti-thrash) |
-| `planner.py` | adaptive recon/attack planner (self-tuning state machine over 18 techniques) |
-| `knowledge.py` | knowledge graph + verified lesson ledger with traversal queries |
-| `skill_resolver.py` | plugin/skill runtime resolver (DI, LRU cache, load policy) |
-| `context_guard.py` | auto-compaction + handoff so long sessions never die at the context window |
-
-Everything fails closed: the default policy is read-only at 1 req/s and denies
-write/report effects until an explicit, validated policy file grants them. The
-TUI exposes the engine via `/engine` (state snapshot), `/plan <target>`
-(adaptive plan), and `/ctx` (context-guard status). The durable worker asserts
-the policy before running a job and records outcomes into the knowledge graph.
-MCP exposes read-only `yteam_engine_status` and `yteam_plan` tools.
-
-### Context Guard (`/ctx`)
-
-The guard estimates the conversation's token usage (deterministic, dependency
-free) and compares it against the model context window with two thresholds:
-75% warning, 85% handoff. At the warning threshold the oldest turns are folded
-into a compacted system summary sent to the model (raw data stays in the SQLite
-store for evidence); at the handoff threshold a Markdown bundle is written under
-`runtime/handoffs/` with a continuation command for a fresh session. This
-mirrors the operator's context-guard policy so an autonomous run does not die
-mid-task at the context wall.
-
-The native gate detector classifies anti-bot/WAF responses and stops or slows
-down safely. It does not solve challenges, evade WAFs, rotate identities, or
-perform credential attacks.
-
-## Local output
-
-Runtime and engagement data is intentionally ignored by Git:
-
-```text
-runtime/bb-runs/<run-id>/
-runtime/assessments/<run-id>/
-runtime/state.db
-runtime/events.jsonl
-```
-
-Reports, evidence, recon dumps, secrets, packs, local model config, and browser
-caches must stay local. Never commit cookies, bearer tokens, customer data, or
-unredacted evidence.
-
-## Verify
+## Development
 
 ```powershell
-python scripts\yteam_doctor.py --json
+python scripts/yteam_doctor.py --json
 python -m compileall -q scripts src
 python -m unittest discover -s tests -p "test_*.py" -v
-git diff --check
 ```
 
-## Authorized use
+The test suite covers the runtime, state store, policy gates, LocalSolver,
+engine modules, context guard, and both TUI visual states.
 
-Use YTEAM only against assets explicitly authorized by a HackerOne, Bugcrowd,
-Intigriti, or equivalent engagement. The default policy forbids destructive
-actions, DoS, credential stuffing, customer-object access, resource claims, and
-automatic report submission. See `REQUIREMENTS.md`, `SECURITY.md`, and
-`docs/PUBLISHING.md`.
+Runtime databases, browser caches, job output, reports, evidence, credentials,
+and local model configuration are ignored by Git. Do not commit cookies,
+bearer tokens, customer data, or unredacted evidence.
+
+See `REQUIREMENTS.md`, `YTEAM_SECURITY.md`, `SECURITY.md`, and
+`docs/ARCHITECTURE.md` for operational details.
