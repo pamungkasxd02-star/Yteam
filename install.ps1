@@ -14,6 +14,9 @@ if (-not (Test-Path (Join-Path $root "scripts\install_yteam.py"))) {
     New-Item -ItemType Directory -Force -Path (Split-Path $root -Parent) | Out-Null
     & $git.Source clone --depth 1 --branch $ref $repo $root
     if ($LASTEXITCODE -ne 0) { throw "Gagal mengambil YTEAM dari GitHub." }
+} elseif (Test-Path (Join-Path $root ".git")) {
+    & $git.Source -C $root pull --ff-only --depth 1 origin $ref 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Warning "Checkout lokal tidak di-update otomatis; melanjutkan dengan versi yang tersedia." }
 }
 
 $pythonCommand = $null
