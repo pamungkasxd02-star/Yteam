@@ -1,4 +1,9 @@
 #!/usr/bin/env sh
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec python3 "$ROOT/scripts/yteam_tui.py" "$@"
+PYTHON="$ROOT/runtime/.venv/bin/python"
+if [ ! -x "$PYTHON" ]; then
+  echo "YTEAM is not installed in this checkout. Run: python3 scripts/install_yteam.py" >&2
+  exit 2
+fi
+exec "$PYTHON" "$ROOT/scripts/yteam_tui.py" "$@"

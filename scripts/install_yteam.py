@@ -16,6 +16,22 @@ ROOT = Path(__file__).resolve().parents[1]
 VENV = ROOT / "runtime" / ".venv"
 
 
+def venv_python(target: Path = ROOT) -> Path:
+    """Return the interpreter installed inside this checkout."""
+    virtualenv = target / "runtime" / ".venv"
+    return virtualenv / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python")
+
+
+def _quote_command_path(path: Path) -> str:
+    """Return a safe absolute path for a generated launcher."""
+    return str(path.resolve()).replace('"', '')
+
+
+def _quote_powershell_path(path: Path) -> str:
+    """Quote a filesystem path for a single-quoted PowerShell literal."""
+    return str(path.resolve()).replace("'", "''")
+
+
 def default_bin() -> Path:
     configured = os.environ.get("YTEAM_BIN_DIR")
     if configured:
@@ -26,33 +42,43 @@ def default_bin() -> Path:
 
 
 def launcher_text(target: Path) -> str:
+    python = _quote_command_path(venv_python(target))
+    script = _quote_command_path(target / "scripts" / "yteam_tui.py")
     if os.name == "nt":
-        return f'@echo off\npython "{target / "scripts" / "yteam_tui.py"}" %*\n'
-    return f'#!/usr/bin/env sh\nset -eu\nexec python3 "{target / "scripts" / "yteam_tui.py"}" "$@"\n'
+        return f'@echo off\n"{python}" "{script}" %*\n'
+    return f'#!/usr/bin/env sh\nset -eu\nexec "{python}" "{script}" "$@"\n'
 
 
 def control_launcher_text(target: Path) -> str:
+    python = _quote_command_path(venv_python(target))
+    script = _quote_command_path(target / "scripts" / "yteam_control.py")
     if os.name == "nt":
-        return f'@echo off\npython "{target / "scripts" / "yteam_control.py"}" %*\n'
-    return f'#!/usr/bin/env sh\nset -eu\nexec python3 "{target / "scripts" / "yteam_control.py"}" "$@"\n'
+        return f'@echo off\n"{python}" "{script}" %*\n'
+    return f'#!/usr/bin/env sh\nset -eu\nexec "{python}" "{script}" "$@"\n'
 
 
 def worker_launcher_text(target: Path) -> str:
+    python = _quote_command_path(venv_python(target))
+    script = _quote_command_path(target / "scripts" / "yteam_worker.py")
     if os.name == "nt":
-        return f'@echo off\npython "{target / "scripts" / "yteam_worker.py"}" %*\n'
-    return f'#!/usr/bin/env sh\nset -eu\nexec python3 "{target / "scripts" / "yteam_worker.py"}" "$@"\n'
+        return f'@echo off\n"{python}" "{script}" %*\n'
+    return f'#!/usr/bin/env sh\nset -eu\nexec "{python}" "{script}" "$@"\n'
 
 
 def localsolver_launcher_text(target: Path) -> str:
+    python = _quote_command_path(venv_python(target))
+    script = _quote_command_path(target / "scripts" / "localsolver.py")
     if os.name == "nt":
-        return f'@echo off\npython "{target / "scripts" / "localsolver.py"}" %*\n'
-    return f'#!/usr/bin/env sh\nset -eu\nexec python3 "{target / "scripts" / "localsolver.py"}" "$@"\n'
+        return f'@echo off\n"{python}" "{script}" %*\n'
+    return f'#!/usr/bin/env sh\nset -eu\nexec "{python}" "{script}" "$@"\n'
 
 
 def mcp_launcher_text(target: Path) -> str:
+    python = _quote_command_path(venv_python(target))
+    script = _quote_command_path(target / "scripts" / "yteam_mcp.py")
     if os.name == "nt":
-        return f'@echo off\npython "{target / "scripts" / "yteam_mcp.py"}" %*\n'
-    return f'#!/usr/bin/env sh\nset -eu\nexec python3 "{target / "scripts" / "yteam_mcp.py"}" "$@"\n'
+        return f'@echo off\n"{python}" "{script}" %*\n'
+    return f'#!/usr/bin/env sh\nset -eu\nexec "{python}" "{script}" "$@"\n'
 
 
 def install(destination: Path) -> Path:
@@ -113,7 +139,7 @@ def run_command(command: list[str], cwd: Path | None = None, env: dict[str, str]
 
 
 def python_in_venv() -> Path:
-    return VENV / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    return venv_python()
 
 
 def find_uv() -> str | None:
@@ -133,6 +159,54 @@ def ensure_uv() -> str:
     if candidate.exists():
         return str(candidate)
     raise RuntimeError("uv was installed but is not on PATH; add its user bin directory and run the installer again.")
+
+
+def _path_contains(path_value: str, destination: Path) -> bool:
+    wanted = str(destination.resolve()).casefold() if os.name == "nt" else str(destination.resolve())
+    return any((item.strip().rstrip("/\\").casefold() if os.name == "nt" else item.strip().rstrip("/\\")) == wanted.rstrip("/\\") for item in path_value.split(os.pathsep) if item.strip())
+
+
+def persist_user_path(destination: Path) -> tuple[bool, str]:
+    """Make the launcher discoverable in future shells on the current OS.
+
+    A child process cannot mutate its parent's environment. We therefore update
+    the user's persistent PATH and return the exact one-line refresh command
+    needed by the already-open shell. No administrator privileges are needed.
+    """
+    destination = destination.resolve()
+    if os.name == "nt":
+        try:
+            import winreg
+
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_READ | winreg.KEY_WRITE) as key:
+                try:
+                    existing, value_type = winreg.QueryValueEx(key, "Path")
+                except FileNotFoundError:
+                    existing, value_type = "", winreg.REG_EXPAND_SZ
+                existing = str(existing or "")
+                if not _path_contains(existing, destination):
+                    existing = existing.rstrip(";" + os.pathsep) + (os.pathsep if existing else "") + str(destination)
+                    winreg.SetValueEx(key, "Path", 0, value_type, existing)
+            return True, '$env:Path = [Environment]::GetEnvironmentVariable("Path", "User")'
+        except (ImportError, OSError):
+            return False, f'$env:Path = [Environment]::GetEnvironmentVariable("Path", "User")'
+
+    current = os.environ.get("PATH", "")
+    if _path_contains(current, destination):
+        return True, f'export PATH="{destination}:$PATH"'
+    shell = Path(os.environ.get("SHELL", "")).name
+    rc = Path.home() / (".zshrc" if shell == "zsh" else ".bashrc" if shell in {"bash", "sh", "ksh"} else ".profile")
+    marker_start = "# >>> yteam launcher >>>"
+    marker_end = "# <<< yteam launcher <<<"
+    block = f'{marker_start}\nexport PATH="{destination}:$PATH"\n{marker_end}\n'
+    try:
+        existing = rc.read_text(encoding="utf-8") if rc.exists() else ""
+        if marker_start not in existing:
+            rc.parent.mkdir(parents=True, exist_ok=True)
+            rc.write_text(existing.rstrip() + "\n\n" + block, encoding="utf-8")
+        return True, f'source "{rc}"'
+    except OSError:
+        return False, f'export PATH="{destination}:$PATH"'
 
 
 def install_dependencies(uv: str, fetch_browser: bool) -> None:
@@ -184,11 +258,17 @@ def main() -> int:
         print(f"install_yteam: {error}", file=sys.stderr)
         return 2
     if not args.dry_run:
-        print("Add its parent directory to PATH once, then open a new terminal.")
+        persisted, refresh = persist_user_path(path.parent)
+        print("Launcher PATH configured automatically for future terminals." if persisted else "Launcher created; automatic PATH persistence was unavailable.")
+        print("Refresh the current terminal once, then run YTEAM:")
         if os.name == "nt":
-            print(f'PowerShell: [Environment]::SetEnvironmentVariable("Path", $env:Path + ";{path.parent}", "User")')
+            current_path = _quote_powershell_path(path.parent)
+            print(f"$env:Path = '{current_path};' + $env:Path")
+            print("yteam")
+            print(f"Or run immediately: & '{_quote_powershell_path(path)}'")
         else:
-            print(f'POSIX shell: export PATH="{path.parent}:$PATH"')
+            print(refresh)
+            print("yteam")
     return 0
 
 

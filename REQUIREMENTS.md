@@ -35,6 +35,13 @@ separate UI application.
 - every Python dependency pinned in `requirements.txt`;
 - the user-local `yteam`, `yteam-control`, `yteam-worker`, `localsolver`, and `yteam-mcp` launchers.
 
+Launchers always use this checkout's `runtime/.venv`. The installer persists
+the launcher directory for future shells and prints a current-shell refresh or
+absolute-path invocation. This is necessary because a child process cannot
+mutate the environment of an already-running PowerShell/cmd/bash process.
+On Windows, the immediate fallback is `& ".\yteam.cmd"` from the checkout;
+the equivalent POSIX fallback is `./yteam` after installation.
+
 No vendor checkout is downloaded. No global OpenCode, Bun, or shell tool is
 modified. Generated runtime and engagement artifacts remain local.
 

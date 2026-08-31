@@ -368,6 +368,17 @@ class StandaloneYteamTests(unittest.TestCase):
         self.assertIn("camoufox", installer.lower())
         self.assertIn("localsolver.py", installer)
         self.assertIn("yteam_mcp.py", installer)
+        self.assertIn('"Scripts" if os.name == "nt"', installer)
+        self.assertIn('"python.exe" if os.name == "nt"', installer)
+        self.assertIn("persist_user_path", installer)
+        import install_yteam
+
+        launcher = install_yteam.launcher_text(ROOT)
+        if os.name == "nt":
+            self.assertIn("runtime\\.venv\\Scripts\\python.exe", launcher)
+        else:
+            self.assertIn("runtime/.venv/bin/python", launcher)
+        self.assertNotIn("python3 \"", launcher)
         result = subprocess.run([sys.executable, str(SCRIPTS / "install_yteam.py"), "--dry-run"], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0)
         self.assertIn("standalone YTEAM", result.stdout)

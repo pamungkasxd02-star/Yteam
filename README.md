@@ -60,6 +60,16 @@ localsolver    browser-observation service
 yteam-mcp      read-only MCP server
 ```
 
+Each launcher calls the Python interpreter inside this checkout's
+`runtime/.venv`; it does not depend on whichever global Python happens to be on
+`PATH`. The installer also persists the launcher directory in the user's PATH
+for future PowerShell, cmd, bash, zsh, or sh sessions. A running shell cannot
+receive environment changes from a child installer process, so Windows prints
+an immediate absolute-path command and a one-line PATH refresh command at the
+end of installation. Run the printed absolute-path command immediately, or
+refresh the current PowerShell with the printed `$env:Path = ...` line. No
+administrator shell is required.
+
 Preview the installation without changing files:
 
 ```text
