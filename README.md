@@ -32,6 +32,27 @@ first-party skills are kept in the repository.
 
 ## Install
 
+### One-command bootstrap
+
+The bootstrapper clones YTEAM to a user-local directory, creates the isolated
+runtime, installs dependencies, configures the launcher PATH, and leaves the
+global OpenCode installation untouched.
+
+macOS/Linux/WSL:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pamungkasxd02-star/Yteam/main/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/pamungkasxd02-star/Yteam/main/install.ps1 | iex
+```
+
+Set `YTEAM_HOME` to choose another checkout location. Use
+`--skip-browser-download` when browser observation is not needed.
+
 ### Windows PowerShell
 
 ```powershell

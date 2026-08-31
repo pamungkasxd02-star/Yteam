@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import stat
@@ -14,6 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VENV = ROOT / "runtime" / ".venv"
+SUPPORTED_PYTHON = {(3, 11), (3, 12), (3, 13)}
+INSTALL_MANIFEST = ROOT / "runtime" / "install-manifest.json"
 
 
 def venv_python(target: Path = ROOT) -> Path:
@@ -39,6 +42,26 @@ def default_bin() -> Path:
     if os.name == "nt":
         return (Path.home() / "bin").resolve()
     return (Path.home() / ".local" / "bin").resolve()
+
+
+def validate_python() -> None:
+    version = (sys.version_info.major, sys.version_info.minor)
+    if version not in SUPPORTED_PYTHON:
+        supported = ", ".join(f"{major}.{minor}" for major, minor in sorted(SUPPORTED_PYTHON))
+        raise RuntimeError(
+            f"Python {version[0]}.{version[1]} is not supported; use Python {supported}. "
+            "On Windows try 'py -3.12', on macOS/Linux try 'python3.12'."
+        )
+
+
+def _atomic_write(path: Path, content: str, *, executable: bool = False) -> None:
+    """Write a launcher atomically so an interrupted install cannot corrupt it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    temporary.write_text(content, encoding="utf-8", newline="\n")
+    if executable and os.name != "nt":
+        temporary.chmod(temporary.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    os.replace(temporary, path)
 
 
 def launcher_text(target: Path) -> str:
@@ -130,9 +153,7 @@ def install(destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     name = "yteam.cmd" if os.name == "nt" else "yteam"
     path = destination / name
-    path.write_text(launcher_text(ROOT), encoding="utf-8", newline="\n")
-    if os.name != "nt":
-        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    _atomic_write(path, launcher_text(ROOT), executable=True)
     return path
 
 
@@ -140,9 +161,7 @@ def install_control(destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     name = "yteam-control.cmd" if os.name == "nt" else "yteam-control"
     path = destination / name
-    path.write_text(control_launcher_text(ROOT), encoding="utf-8", newline="\n")
-    if os.name != "nt":
-        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    _atomic_write(path, control_launcher_text(ROOT), executable=True)
     return path
 
 
@@ -150,9 +169,7 @@ def install_worker(destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     name = "yteam-worker.cmd" if os.name == "nt" else "yteam-worker"
     path = destination / name
-    path.write_text(worker_launcher_text(ROOT), encoding="utf-8", newline="\n")
-    if os.name != "nt":
-        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    _atomic_write(path, worker_launcher_text(ROOT), executable=True)
     return path
 
 
@@ -160,9 +177,7 @@ def install_localsolver(destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     name = "localsolver.cmd" if os.name == "nt" else "localsolver"
     path = destination / name
-    path.write_text(localsolver_launcher_text(ROOT), encoding="utf-8", newline="\n")
-    if os.name != "nt":
-        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    _atomic_write(path, localsolver_launcher_text(ROOT), executable=True)
     return path
 
 
@@ -170,9 +185,7 @@ def install_mcp(destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     name = "yteam-mcp.cmd" if os.name == "nt" else "yteam-mcp"
     path = destination / name
-    path.write_text(mcp_launcher_text(ROOT), encoding="utf-8", newline="\n")
-    if os.name != "nt":
-        path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    _atomic_write(path, mcp_launcher_text(ROOT), executable=True)
     return path
 
 
@@ -191,11 +204,15 @@ def find_uv() -> str | None:
     return shutil.which("uv")
 
 
-def ensure_uv() -> str:
+def ensure_uv() -> str | None:
     uv = find_uv()
     if uv:
         return uv
-    run_command([sys.executable, "-m", "pip", "install", "--user", "uv"])
+    try:
+        run_command([sys.executable, "-m", "pip", "install", "--user", "uv"])
+    except RuntimeError:
+        print("uv is unavailable; falling back to the standard-library venv + pip backend.", file=sys.stderr)
+        return None
     uv = find_uv()
     if uv:
         return uv
@@ -203,7 +220,8 @@ def ensure_uv() -> str:
     candidate = user_base / ("Scripts" if os.name == "nt" else "bin") / ("uv.exe" if os.name == "nt" else "uv")
     if candidate.exists():
         return str(candidate)
-    raise RuntimeError("uv was installed but is not on PATH; add its user bin directory and run the installer again.")
+    print("uv was installed outside PATH; falling back to the standard-library venv + pip backend.", file=sys.stderr)
+    return None
 
 
 def _python_user_base() -> Path:
@@ -268,11 +286,21 @@ def persist_user_path(destination: Path) -> tuple[bool, str]:
         return False, f'export PATH="{destination}:$PATH"'
 
 
-def install_dependencies(uv: str, fetch_browser: bool) -> None:
+def install_dependencies(uv: str | None, fetch_browser: bool) -> str:
+    backend = "uv" if uv else "pip"
     if not python_in_venv().exists():
+        VENV.parent.mkdir(parents=True, exist_ok=True)
+        if uv:
+            python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+            run_command([uv, "venv", "--python", python_version, str(VENV)], cwd=ROOT)
+        else:
+            run_command([sys.executable, "-m", "venv", str(VENV)], cwd=ROOT)
+    if uv:
         python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
-        run_command([uv, "venv", "--python", python_version, str(VENV)], cwd=ROOT)
-    run_command([uv, "pip", "install", "--python", str(python_in_venv()), "-r", str(ROOT / "requirements.txt")], cwd=ROOT)
+        run_command([uv, "pip", "install", "--python", str(python_in_venv()), "-r", str(ROOT / "requirements.txt")], cwd=ROOT)
+    else:
+        run_command([str(python_in_venv()), "-m", "pip", "install", "--upgrade", "pip"], cwd=ROOT)
+        run_command([str(python_in_venv()), "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")], cwd=ROOT)
     if fetch_browser:
         cache = Path(os.environ.get("CAMOUFOX_CACHE", str(ROOT / "runtime" / "cache" / "camoufox"))).expanduser().resolve()
         cache.mkdir(parents=True, exist_ok=True)
@@ -280,6 +308,23 @@ def install_dependencies(uv: str, fetch_browser: bool) -> None:
         env["PLAYWRIGHT_BROWSERS_PATH"] = str(ROOT / "runtime" / "cache" / "playwright")
         env["CAMOUFOX_CACHE_DIR"] = str(cache)
         run_command([str(python_in_venv()), "-m", "camoufox", "fetch"], cwd=ROOT, env=env)
+    return backend
+
+
+def write_install_manifest(destination: Path, backend: str, browser: bool) -> None:
+    manifest = {
+        "product": "YTEAM",
+        "schema_version": 1,
+        "platform": sys.platform,
+        "os_name": os.name,
+        "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "venv": str(VENV),
+        "launcher_dir": str(destination),
+        "package_backend": backend,
+        "browser_data_requested": browser,
+    }
+    INSTALL_MANIFEST.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(INSTALL_MANIFEST, json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
 
 def setup(args: argparse.Namespace) -> Path:
@@ -289,20 +334,24 @@ def setup(args: argparse.Namespace) -> Path:
         print(f"YTEAM root: {ROOT}")
         print("Would install the standalone YTEAM runtime and native TUI; no upstream vendor checkout is required.")
         return (args.bin_dir or default_bin()).resolve() / ("yteam.cmd" if os.name == "nt" else "yteam")
+    validate_python()
     uv = ensure_uv()
-    install_dependencies(uv, not args.skip_browser_download)
+    browser_requested = not args.skip_browser_download
+    backend = install_dependencies(uv, browser_requested)
     destination = (args.bin_dir or default_bin()).resolve()
     path = install(destination)
     control_path = install_control(destination)
     worker_path = install_worker(destination)
     localsolver_path = install_localsolver(destination)
     mcp_path = install_mcp(destination)
+    write_install_manifest(destination, backend, browser_requested)
     print(f"Installed YTEAM launcher: {path}")
     print(f"Installed YTEAM control launcher: {control_path}")
     print(f"Installed YTEAM worker launcher: {worker_path}")
     print(f"Installed LocalSolver launcher: {localsolver_path}")
     print(f"Installed YTEAM MCP launcher: {mcp_path}")
     print("Global OpenCode was not modified.")
+    print(f"Install manifest: {INSTALL_MANIFEST}")
     return path
 
 

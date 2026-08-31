@@ -26,6 +26,10 @@ separate UI application.
 
 `python scripts/install_yteam.py` creates a local runtime tree:
 
+The same setup can be bootstrapped without a pre-existing checkout using
+`install.sh` on macOS/Linux/WSL or `install.ps1` on Windows. The bootstrapper
+uses `YTEAM_HOME` when set and otherwise chooses a user-local directory.
+
 - Native YTEAM TUI under `scripts/yteam_tui.py`;
 - Native policy, session, event, model, skill, LocalSolver, MCP, and assessment components;
 - the composable orchestration engine under `src/yteam_engine/` (policy, DAG graph,

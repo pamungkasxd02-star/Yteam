@@ -483,6 +483,11 @@ class StandaloneYteamTests(unittest.TestCase):
         self.assertIn('"Scripts" if os.name == "nt"', installer)
         self.assertIn('"python.exe" if os.name == "nt"', installer)
         self.assertIn("persist_user_path", installer)
+        self.assertIn("falling back to the standard-library venv + pip backend", installer)
+        self.assertIn("install-manifest.json", installer)
+        self.assertTrue((ROOT / "install.py").exists())
+        self.assertTrue((ROOT / "install.sh").exists())
+        self.assertTrue((ROOT / "install.ps1").exists())
         import install_yteam
 
         launcher = install_yteam.launcher_text(ROOT)
@@ -498,6 +503,14 @@ class StandaloneYteamTests(unittest.TestCase):
         result = subprocess.run([sys.executable, str(SCRIPTS / "install_yteam.py"), "--dry-run"], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0)
         self.assertIn("standalone YTEAM", result.stdout)
+
+    def test_bootstrapper_uses_local_checkout_and_dry_run(self) -> None:
+        result = subprocess.run([sys.executable, str(ROOT / "install.py"), "--dry-run"], capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("standalone YTEAM", result.stdout)
+        bootstrap = (ROOT / "install.py").read_text(encoding="utf-8")
+        self.assertIn("YTEAM_HOME", bootstrap)
+        self.assertIn("--depth", bootstrap)
 
     def test_opencode_style_tui_constructs_both_visual_states(self) -> None:
         from yteam_runtime import YteamRuntime
