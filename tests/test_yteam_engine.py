@@ -108,6 +108,53 @@ class EngineGraphTests(unittest.TestCase):
         self.assertEqual(run.completed, 1)
         self.assertEqual(state["calls"], 3)
 
+    def test_failed_prerequisite_blocks_dependent_without_invoke(self) -> None:
+        from yteam_engine.graph import TaskGraph, TaskNode
+        from yteam_engine.policy import Policy
+
+        invoked = {"dependent": False}
+
+        def bad(ctx):
+            raise RuntimeError("boom")
+
+        def dependent(ctx):
+            invoked["dependent"] = True
+            return {"v": 1}
+
+        graph = TaskGraph(Policy.default())
+        graph.add(TaskNode(id="bad", fn=bad))
+        graph.add(TaskNode(id="dependent", fn=dependent, deps=["bad"]))
+        run = graph.run()
+        self.assertEqual(run.failed, 1)
+        self.assertEqual(run.blocked, 1)
+        self.assertEqual(run.by_id()["dependent"].status, "blocked")
+        self.assertIn("bad", run.by_id()["dependent"].error)
+        self.assertFalse(invoked["dependent"])
+
+    def test_graph_policy_target_scoped(self) -> None:
+        from yteam_engine.graph import TaskGraph, TaskNode
+        from yteam_engine.policy import Policy, PolicyViolation
+
+        policy = Policy({
+            "schema_version": 1,
+            "default_side_effect": "read",
+            "per_target_rate": 1.0,
+            "targets": {"api.example.com": {"allowed_effects": ["read", "analyze"]}},
+        })
+        graph = TaskGraph(policy, target="api.example.com")
+        graph.add(TaskNode(id="analysis", fn=lambda ctx: {"ok": True}, side_effect="analyze"))
+        run = graph.run()
+        self.assertEqual(run.completed, 1)
+
+    def test_scheduler_rate_update_reflects_in_bucket(self) -> None:
+        from yteam_engine.policy import Policy
+        from yteam_engine.scheduler import Scheduler
+
+        scheduler = Scheduler(Policy.default())
+        scheduler.register("api.example.com", rate_per_second=5.0)
+        scheduler.register("api.example.com", rate_per_second=9.0)
+        self.assertEqual(scheduler._buckets["api.example.com"].rate, 9.0)
+
 
 class EngineSchedulerTests(unittest.TestCase):
     def test_admit_and_policy_gate(self) -> None:
@@ -287,7 +334,7 @@ class EngineContextGuardTests(unittest.TestCase):
             self.assertEqual(verdict.level, "handoff")
             self.assertTrue(verdict.handoff_path)
             self.assertTrue(Path(verdict.handoff_path).exists())
-            self.assertIn("opencode run", verdict.continue_cmd)
+            self.assertIn("yteam --handoff", verdict.continue_cmd)
 
     def test_runtime_ctx_command(self) -> None:
         import tempfile

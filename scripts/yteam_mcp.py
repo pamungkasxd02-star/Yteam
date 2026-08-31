@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native YTEAM MCP stdio server with Cybermes-compatible safe tools.
+"""Native YTEAM MCP stdio server with read-only, policy-aware tools.
 
 Read-only metadata/search/scope tools are available by default. Active network
 actions are not exposed here; autonomous assessment remains policy-gated via
@@ -35,7 +35,7 @@ def run_server() -> int:
 
     @server.tool()
     def yteam_list_skills(filter: str = "", limit: int = 30) -> dict[str, object]:
-        """List metadata for native and configured Cybermes-compatible skills."""
+        """List metadata for the first-party YTEAM skill catalog."""
         items = registry()
         wanted = filter.lower().strip()
         if wanted:
@@ -66,9 +66,9 @@ def run_server() -> int:
     def yteam_aggregate_report(target_path: str) -> dict[str, object]:
         """Aggregate confirmed Markdown findings without executing PoC files."""
         path = Path(target_path).expanduser().resolve()
-        allowed_root = (ROOT / "reports").resolve()
-        if not path.is_relative_to(allowed_root):
-            raise ValueError("target_path must remain under the YTEAM reports directory")
+        allowed_roots = [(ROOT / "reports").resolve(), (ROOT / "runtime" / "bb-runs").resolve()]
+        if not any(path.is_relative_to(root) for root in allowed_roots):
+            raise ValueError("target_path must remain under YTEAM reports or runtime/bb-runs")
         return aggregate_reports(path)
 
     @server.tool()

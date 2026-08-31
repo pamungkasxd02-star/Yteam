@@ -184,7 +184,7 @@ class YteamRuntime:
         return "\n".join(lines)
 
     def events_text(self) -> str:
-        events = self.events.store.events(self.events.aggregate_id, after=0, limit=12)
+        events = self.events.store.events(self.events.aggregate_id, after=0, limit=500)[-12:]
         if not events:
             return "No runtime events recorded."
         return "\n".join(f"#{item['sequence']} {item['kind']}: {item['detail']}" for item in events)
@@ -232,19 +232,19 @@ class YteamRuntime:
         verdict = guard.check(messages, meta=self._guard_meta, allow_handoff=True)
         return json.dumps(verdict.as_dict(), indent=2)
 
-    def guard_conversation(self) -> tuple[list[dict[str, str]], str | None]:
-        """Run the context guard over the session. Returns (messages, warning)."""
+    def guard_conversation(self, base_tokens: int = 0) -> tuple[list[dict[str, str]], object]:
+        """Run the context guard and return prompt history plus its verdict."""
         guard = self._guard()
         messages = self.session.messages
-        verdict = guard.check(messages, meta=self._guard_meta, allow_handoff=True)
+        verdict = guard.check(messages, meta=self._guard_meta, allow_handoff=True, base_tokens=base_tokens)
         self.events.emit("context.guard", verdict.level, {"tokens": verdict.estimated_tokens, "ratio": round(verdict.used_ratio, 4)})
         if verdict.compaction_applied:
             self.events.emit("context.compacted", f"saved {verdict.compaction_saved_tokens} tokens", {"saved": verdict.compaction_saved_tokens})
-            return messages, f"[context compacted: saved ~{verdict.compaction_saved_tokens} tokens]"
+            return guard.compact(messages)[0], verdict
         if verdict.level == "handoff":
             self.events.emit("context.handoff", verdict.handoff_path)
-            return messages, f"[context at handoff threshold: {verdict.handoff_path}\nContinue: {verdict.continue_cmd}]"
-        return messages, None
+            return messages, verdict
+        return messages, verdict
 
     def learn(self, value: str) -> str:
         try:
@@ -309,18 +309,19 @@ class YteamRuntime:
     def answer_stream(self, message: str):
         self.session.append("user", message)
         self.events.emit("chat.requested", self.selected_model)
-        guard_warning = self.guard_conversation()[1]
-        history = self.session.conversation()
-        # Apply prompt-side compaction when the guard flags it.
-        guard = self._guard()
-        if guard.ratio(history) >= guard.config.warning_ratio and len(history) > guard.config.keep_recent_messages:
-            history, _ = guard.compact(history)
         prompt = [{"role": "system", "content": self.profile_prompt + "\n\nUse only verified lessons as prior knowledge; treat proposals and hypotheses as unverified. Follow the active safety policy and never invent evidence.\n\nVerified YTEAM lessons:\n" + self.memory.context(message)}]
+        from yteam_engine.context_guard import estimate_tokens
+
+        history, verdict = self.guard_conversation(base_tokens=estimate_tokens(prompt[0]["content"]))
+        if verdict.level == "handoff":
+            warning = f"[context handoff required: {verdict.handoff_path}\nContinue: {verdict.continue_cmd}]"
+            yield warning
+            self.session.append("assistant", warning)
+            return
         prompt.extend(history)
         chunks: list[str] = []
-        if guard_warning:
-            # Surface the guard notice to the user without storing it as a turn.
-            chunks.append("\n[guard] " + guard_warning + "\n\n")
+        if verdict.compaction_applied:
+            chunks.append(f"\n[guard] context compacted; saved ~{verdict.compaction_saved_tokens} tokens\n\n")
         try:
             for event in stream_chat_events({**self.config, "model": self.selected_model}, prompt):
                 kind = str(event.get("type", ""))

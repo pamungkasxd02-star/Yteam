@@ -359,6 +359,39 @@ class StandaloneYteamTests(unittest.TestCase):
             self.assertTrue((root / "SUMMARY.md").exists())
             self.assertTrue((root / "metadata.json").exists())
 
+    def test_scope_origin_and_path_matching_is_consistent(self) -> None:
+        from yteam_scope import validate
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scope = root / "scope.yaml"
+            scope.write_text(
+                "in_scope:\n  - https://allowed.test\n  - https://api.allowed.test/v1\nout_of_scope: []\n",
+                encoding="utf-8",
+            )
+            self.assertTrue(validate("https://allowed.test", explicit=scope).allowed)
+            self.assertTrue(validate("https://allowed.test/path/x", explicit=scope).allowed)
+            self.assertFalse(validate("https://allowed.test.evil.com", explicit=scope).allowed)
+            self.assertFalse(validate("http://allowed.test", explicit=scope).allowed)
+
+    def test_scope_malformed_yaml_blocks(self) -> None:
+        from yteam_scope import validate
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scope = root / "scope.yaml"
+            scope.write_text("in_scope: [unclosed\n", encoding="utf-8")
+            decision = validate("https://allowed.test", explicit=scope)
+            self.assertFalse(decision.allowed)
+
+    def test_recon_same_host_requires_same_origin(self) -> None:
+        from yteam_recon import same_host
+
+        self.assertTrue(same_host("https://allowed.test/a", "https://allowed.test"))
+        self.assertFalse(same_host("http://allowed.test/a", "https://allowed.test"))
+        self.assertFalse(same_host("https://allowed.test.evil.com/a", "https://allowed.test"))
+        self.assertFalse(same_host("https://allowed.test:8443/a", "https://allowed.test"))
+
     def test_installer_is_native_and_dry_run_is_non_destructive(self) -> None:
         installer = (SCRIPTS / "install_yteam.py").read_text(encoding="utf-8")
         self.assertIn('ROOT / "runtime" / ".venv"', installer)

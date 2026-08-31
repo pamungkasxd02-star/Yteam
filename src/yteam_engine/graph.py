@@ -73,9 +73,10 @@ class GraphRun:
 class TaskGraph:
     """A policy-bound DAG of tasks with bounded parallel execution."""
 
-    def __init__(self, policy: Policy, max_workers: int = 4) -> None:
+    def __init__(self, policy: Policy, max_workers: int = 4, target: str = "") -> None:
         self.policy = policy
         self.max_workers = max(1, int(max_workers))
+        self.target = target
         self.nodes: dict[str, TaskNode] = {}
         self._lock = threading.RLock()
 
@@ -113,10 +114,10 @@ class TaskGraph:
 
     def _resolve(self, node: TaskNode, results: dict[str, dict[str, object]]) -> dict[str, object]:
         # Policy gate: does the declared side-effect class fit the active policy?
-        self.policy.assert_effect(node.side_effect, f"task:{node.id}")
+        self.policy.assert_effect(node.side_effect, self.target or f"task:{node.id}")
         resolved: dict[str, object] = {"self": dict(node.metadata)}
         for dep in node.deps:
-            resolved[dep] = results.get(dep, {})
+            resolved[dep] = results[dep]
         return resolved
 
     def run(self, context: dict[str, object] | None = None) -> GraphRun:
@@ -131,6 +132,7 @@ class TaskGraph:
             node = self.nodes[node_id]
             outcome = NodeOutcome(node_id=node_id, status="failed", attempts=0)
             import time
+            total_started = time.monotonic()
 
             for attempt in range(1, node.max_attempts + 1):
                 outcome.attempts = attempt
@@ -156,21 +158,41 @@ class TaskGraph:
                     outcome.error = f"{type(error).__name__}: {error}"
                     if attempt < node.max_attempts:
                         time.sleep(node.backoff_seconds * attempt)
-            outcome.duration_seconds = time.monotonic() - outcome.duration_seconds if outcome.duration_seconds else 0.0
+            outcome.duration_seconds = time.monotonic() - total_started
             return outcome
 
-        # Serial bootstrap for dependencies, parallelize only independent ready
-        # batches to keep the ledger deterministic and policy simple.
-        for node_id in order:
-            outcome = execute(node_id)
-            run.outcomes.append(outcome)
-            if outcome.status == "completed":
-                run.completed += 1
-                results[node_id] = outcome.result
-            elif outcome.status == "blocked":
-                run.blocked += 1
-            else:
-                run.failed += 1
+        from concurrent.futures import ThreadPoolExecutor
+
+        pending = set(self.nodes)
+        outcomes: dict[str, NodeOutcome] = {}
+        while pending:
+            ready = sorted(node_id for node_id in pending if all(dep in outcomes for dep in self.nodes[node_id].deps))
+            if not ready:
+                raise ValueError(f"task graph contains a dependency cycle among: {sorted(pending)}")
+            batch: list[tuple[str, NodeOutcome]] = []
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures = {}
+                for node_id in ready:
+                    failed_deps = [dep for dep in self.nodes[node_id].deps if outcomes[dep].status != "completed"]
+                    if failed_deps:
+                        futures[node_id] = None
+                        batch.append((node_id, NodeOutcome(node_id, "blocked", 0, f"dependency did not complete: {failed_deps}")))
+                    else:
+                        futures[node_id] = executor.submit(execute, node_id)
+                for node_id, future in futures.items():
+                    if future is not None:
+                        batch.append((node_id, future.result()))
+            for node_id, outcome in sorted(batch, key=lambda item: item[0]):
+                pending.remove(node_id)
+                outcomes[node_id] = outcome
+                run.outcomes.append(outcome)
+                if outcome.status == "completed":
+                    run.completed += 1
+                    results[node_id] = outcome.result
+                elif outcome.status == "blocked":
+                    run.blocked += 1
+                else:
+                    run.failed += 1
 
         run.outcomes.sort(key=lambda item: item.node_id)
         return run
@@ -186,6 +208,7 @@ class TaskGraph:
         return {
             "node_count": len(self.nodes),
             "max_workers": self.max_workers,
+            "target": self.target,
             "nodes": [
                 {
                     "id": node.id,

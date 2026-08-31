@@ -24,8 +24,8 @@ never shipping "here's how to attack anyone" tooling.
 
 ```
 src/
-  core/          # shared scope-safe utilities
   local_solver/  # allowlisted anti-bot/browser observation (authorized testing)
+  yteam_engine/  # policy-bound orchestration, planning, graph, and context
 tests/           # unit tests
 scripts/         # Yteam orchestration engines
 docs/            # guides

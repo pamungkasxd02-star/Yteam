@@ -99,14 +99,20 @@ retrieval-based learning with provenance and a verification gate.
 
 ## UI model
 
-The native terminal UI uses a full-screen ANSI renderer with the same mental
-model as an OpenCode session view:
+The native terminal UI uses a full-screen `prompt_toolkit` application with an
+OpenCode-style interaction model:
 
-- left rail: session, target, model, policy, memory counters;
-- center: transcript and tool/event timeline;
-- bottom: composer and command hints;
-- status bar: connection, active turn, provider, event sequence;
-- command palette: commands come from one registry and work in every adapter.
+- onboarding view: centered logo and composer before the first turn;
+- workspace view: transcript/composer on the left and a persistent information
+  rail on the right;
+- right rail: context estimate, MCP state, memory counters, working directory,
+  model, and policy state;
+- bottom composer: multiline input, prompt history, slash completion, command
+  palette, and interrupt handling;
+- footer: active-turn state, context percentage, and keyboard hints.
+
+The implementation is first-party and does not import an upstream UI. The
+`--plain` mode remains available for pipes, CI, and non-interactive terminals.
 
 It intentionally has no browser build or global UI dependency. A future web UI
 can consume the same JSON event/session contract without changing the core.

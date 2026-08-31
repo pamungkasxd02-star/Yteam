@@ -37,6 +37,15 @@ def ensure_worker(root: Path = ROOT) -> bool:
     runtime = root / "runtime"
     lock = runtime / "worker.lock"
     if lock.exists():
+        live_pid = 0
+        try:
+            first_line = lock.read_text(encoding="utf-8", errors="replace").splitlines()[0]
+            if first_line.startswith("pid="):
+                live_pid = int(first_line[4:])
+        except (OSError, ValueError, IndexError):
+            live_pid = 0
+        if live_pid and _process_alive(live_pid):
+            return False
         try:
             if lock.stat().st_mtime > time.time() - 60:
                 return False
@@ -60,6 +69,21 @@ def ensure_worker(root: Path = ROOT) -> bool:
         output.close()
         return False
     output.close()
+    return True
+
+
+def _process_alive(pid: int) -> bool:
+    """Portable liveness probe used only for the local worker lock."""
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
     return True
 
 
@@ -105,6 +129,10 @@ def execute_job(store, job: dict[str, object], worker_id: str) -> dict[str, obje
     def heartbeat() -> None:
         while not stop.wait(5):
             store.heartbeat_job(job_id, worker_id, "recon")
+            try:
+                (ROOT / "runtime" / "worker.lock").touch()
+            except OSError:
+                pass
 
     thread = threading.Thread(target=heartbeat, name=f"heartbeat-{job_id}", daemon=True)
     thread.start()
@@ -163,7 +191,7 @@ def daemon() -> int:
     except FileExistsError:
         return 0
     worker_id = f"worker_{os.getpid()}_{secrets.token_hex(3)}"
-    handle.write(worker_id)
+    handle.write(f"pid={os.getpid()}\nworker={worker_id}")
     handle.close()
     try:
         store = _store()

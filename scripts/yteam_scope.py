@@ -23,7 +23,7 @@ class ScopeDecision:
     reason: str
 
 
-def _read_rules(path: Path) -> tuple[list[str], list[str]]:
+def _read_rules(path: Path) -> tuple[list[str], list[str], bool]:
     try:
         import yaml
 
@@ -31,10 +31,14 @@ def _read_rules(path: Path) -> tuple[list[str], list[str]]:
         if isinstance(data, dict):
             inside = data.get("in_scope", data.get("targets", []))
             outside = data.get("out_of_scope", [])
-            return list(map(str, inside)) if isinstance(inside, list) else [], list(map(str, outside)) if isinstance(outside, list) else []
+            return list(map(str, inside)) if isinstance(inside, list) else [], list(map(str, outside)) if isinstance(outside, list) else [], True
     except (ImportError, OSError, ValueError):
-        pass
-    return [], []
+        return [], [], False
+    except Exception:
+        # PyYAML raises YAMLError for malformed documents. A malformed scope
+        # file is a blocker, never an implicit allow.
+        return [], [], False
+    return [], [], False
 
 
 def _matches(target: str, rule: str) -> bool:
@@ -46,6 +50,16 @@ def _matches(target: str, rule: str) -> bool:
         return True
     if rule.startswith("*."):
         return host == rule[2:] or host.endswith(rule[1:])
+    if "://" in rule:
+        expected = urlparse(rule)
+        expected_port = expected.port or (443 if expected.scheme == "https" else 80)
+        actual_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        if (parsed.scheme, host, actual_port) != (expected.scheme, (expected.hostname or "").lower(), expected_port):
+            return False
+        expected_path = expected.path.rstrip("/")
+        if not expected_path:
+            return True
+        return parsed.path.rstrip("/").startswith(expected_path)
     return fnmatch.fnmatch(value, rule) or fnmatch.fnmatch(host, rule)
 
 
@@ -58,13 +72,17 @@ def find_scope(target_slug: str = "", explicit: Path | None = None) -> tuple[Pat
     candidates += [ROOT / "scope.yaml", ROOT.parent / "scope.yaml"]
     for path in candidates:
         if path.exists() and path.is_file():
-            inside, outside = _read_rules(path)
+            inside, outside, valid = _read_rules(path)
+            if not valid:
+                return path, [], ["__invalid_scope_file__"]
             return path, inside, outside
     return None, [], []
 
 
 def validate(target: str, target_slug: str = "", explicit: Path | None = None) -> ScopeDecision:
     path, inside, outside = find_scope(target_slug, explicit)
+    if "__invalid_scope_file__" in outside:
+        return ScopeDecision(target, False, "blocked", str(path or ""), "", "Scope file is invalid; refusing to run.")
     for rule in outside:
         if _matches(target, rule):
             return ScopeDecision(target, False, "blocked", str(path or ""), rule, "Matched explicit out-of-scope rule.")

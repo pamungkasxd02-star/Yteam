@@ -38,6 +38,8 @@ def stream_chat_events(config: dict[str, str], messages: list[dict[str, str]]) -
     except urllib.error.HTTPError as error:
         detail = error.read(800).decode("utf-8", "replace")
         raise RuntimeError(f"model provider returned HTTP {error.code}: {detail}") from error
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+        raise RuntimeError(f"model provider unavailable: {error}") from error
     with response:
         for raw_line in response:
             line = raw_line.decode("utf-8", "replace").strip()

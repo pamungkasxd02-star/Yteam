@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import re
 import time
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -103,8 +104,8 @@ class ContextGuard:
     def estimate(self, messages: list[dict[str, str]]) -> int:
         return estimate_conversation_tokens(messages)
 
-    def ratio(self, messages: list[dict[str, str]]) -> float:
-        total = self.estimate(messages)
+    def ratio(self, messages: list[dict[str, str]], base_tokens: int = 0) -> float:
+        total = base_tokens + self.estimate(messages)
         return total / self.config.context_window
 
     # -- compaction -------------------------------------------------------
@@ -125,8 +126,8 @@ class ContextGuard:
         compacted = [{"role": "system", "content": summary}] + kept
         return compacted, old_tokens
 
-    def _should_compact(self, messages: list[dict[str, str]]) -> bool:
-        used = self.ratio(messages)
+    def _should_compact(self, messages: list[dict[str, str]], base_tokens: int = 0) -> bool:
+        used = self.ratio(messages, base_tokens)
         # Compact when we cross the warning ratio and have more than the keep window.
         return used >= self.config.warning_ratio and len(messages) > self.config.keep_recent_messages
 
@@ -137,7 +138,7 @@ class ContextGuard:
             return ""
         self.handoff_dir.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d_%H%M%S")
-        path = self.handoff_dir / f"HANDOFF_{stamp}.md"
+        path = self.handoff_dir / f"HANDOFF_{stamp}_{secrets.token_hex(3)}.md"
         summary = _fold_summary(messages, self.config.max_compact_system_tokens)
         meta_lines = "\n".join(f"- {key}: {value}" for key, value in (meta or {}).items())
         path.write_text(
@@ -156,12 +157,15 @@ class ContextGuard:
 
     def continue_cmd(self, handoff_path: str) -> str:
         """Return the shell command to resume a fresh session from a handoff."""
-        return f"opencode run --auto --agent bb \"CONTINUE from handoff: {handoff_path}\""
+        # YTEAM is standalone; do not emit a command that requires an upstream
+        # agent runtime. The TUI resumes the durable latest session and displays
+        # the handoff note when this optional path is supplied.
+        return f'yteam --handoff "{handoff_path}"'
 
     # -- main gate --------------------------------------------------------
-    def check(self, messages: list[dict[str, str]], meta: dict[str, object] | None = None, allow_handoff: bool = True) -> GuardVerdict:
+    def check(self, messages: list[dict[str, str]], meta: dict[str, object] | None = None, allow_handoff: bool = True, base_tokens: int = 0) -> GuardVerdict:
         """Run the guard: compact at warning, hand off at critical."""
-        estimated = self.estimate(messages)
+        estimated = base_tokens + self.estimate(messages)
         used = estimated / self.config.context_window
         if used >= self.config.handoff_ratio:
             path = self.write_handoff(messages, meta) if (allow_handoff and self.handoff_dir) else ""
@@ -174,7 +178,7 @@ class ContextGuard:
                 handoff_path=path,
                 continue_cmd=self.continue_cmd(path) if path else "",
             )
-        if self._should_compact(messages):
+        if self._should_compact(messages, base_tokens):
             compacted, saved = self.compact(messages)
             # Verdict reflects the post-compaction state for the caller to use.
             return GuardVerdict(

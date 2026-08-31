@@ -14,6 +14,7 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterable
 
 from yteam_safety import redact_text, redact_value
 

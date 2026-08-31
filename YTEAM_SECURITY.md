@@ -54,9 +54,13 @@ For image or screenshot input:
 ## Native command compatibility
 
 The default launcher starts the native YTEAM TUI. It provides `/models`,
-`/model <id>`, `/status`, `/history`, `/clear`, `/doctor`, `/bb
-<authorized-target>`, and `/quit`. Model requests go directly to the configured
-OpenAI-compatible endpoint; no gateway or protocol server is started.
+`/model <id>`, `/status`, `/history`, `/clear`, `/memory`, `/events`, `/jobs`,
+`/skills`, `/engine`, `/plan <target>`, `/ctx`, `/doctor`, `/bb <target>`, and
+`/quit`. Model requests go directly to the configured OpenAI-compatible
+endpoint; no gateway or protocol server is started. When the context guard
+reaches its handoff threshold, it writes `runtime/handoffs/HANDOFF_*.md`; the
+printed `yteam --handoff <path>` command resumes the durable session and shows
+the handoff note.
 
 ## Learning contract
 

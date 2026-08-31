@@ -17,7 +17,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -105,7 +105,30 @@ def normalize(target: str) -> str:
 
 
 def same_host(url: str, base: str) -> bool:
-    return (urlparse(url).hostname or "").lower() == (urlparse(base).hostname or "").lower()
+    left = urlparse(url)
+    right = urlparse(base)
+    if left.scheme.lower() != right.scheme.lower():
+        return False
+    if (left.hostname or "").lower() != (right.hostname or "").lower():
+        return False
+    return (left.port or (443 if left.scheme.lower() == "https" else 80)) == (right.port or (443 if right.scheme.lower() == "https" else 80))
+
+
+class NoRedirectHandler(HTTPRedirectHandler):
+    """Record redirect locations without requesting another origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+class NoRedirectHTTPSHandler(HTTPSHandler):
+    def __init__(self, context: ssl.SSLContext) -> None:
+        super().__init__(context=context)
+
+
+def _open_without_redirects(request: Request, timeout: float, context: ssl.SSLContext):
+    opener = build_opener(NoRedirectHandler, NoRedirectHTTPSHandler(context))
+    return opener.open(request, timeout=timeout)
 
 
 def route_priority(url: str, status: int | None, content_type: str = "", source: str = "") -> tuple[int, list[str]]:
@@ -171,7 +194,7 @@ class ReconEngine:
         started = time.monotonic()
         request = Request(url, headers=self.headers, method="GET")
         try:
-            with urlopen(request, timeout=12, context=self.context) as response:
+            with _open_without_redirects(request, timeout=12, context=self.context) as response:
                 body = response.read(1_048_576)
                 elapsed = int((time.monotonic() - started) * 1000)
                 content_type = response.headers.get("Content-Type", "")
@@ -181,7 +204,7 @@ class ReconEngine:
                 observation = HTTPObservation(
                     url=redact_url(url), status=response.status, content_type=content_type, length=len(body), elapsed_ms=elapsed,
                     title=re.sub(r"\s+", " ", title.group(1)).strip() if title else "",
-                    redirect=redact_url(response.geturl()) if response.geturl() != url else "",
+                    redirect=redact_url(response.headers.get("Location", "")) if response.headers.get("Location") else "",
                     server=response.headers.get("Server", ""),
                     technologies=self.technologies(response.headers, text),
                     security_headers=self.security_headers(response.headers),

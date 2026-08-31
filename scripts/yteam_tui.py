@@ -404,8 +404,6 @@ class OpenCodeUI:
             ("class:muted", f" {tokens:,} tokens\n {ratio * 100:.0f}% used\n $0.00 spent\n\n"),
             ("class:heading", " MCP\n"),
             ("class:success", " • "), ("class:user", "yteam "), ("class:muted", "Connected\n\n"),
-            ("class:heading", " LSP\n"),
-            ("class:muted", " LSPs are disabled\n\n"),
             ("class:heading", " Memory\n"),
             ("class:muted", f" {memory.get('verified', 0)} verified  ·  {memory.get('proposals', 0)} pending\n\n"),
             ("class:muted", f" {ROOT}\n\n"),
@@ -490,6 +488,15 @@ class OpenCodeUI:
         self.app.run()
         return 0
 
+    def resume_handoff(self, path: Path) -> None:
+        """Display a bounded handoff note without copying raw evidence."""
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as error:
+            self.state.add("assistant", f"Handoff could not be opened: {error}")
+            return
+        self.state.add("assistant", f"Resumed from handoff: {path}\n{text[:6000]}")
+
 
 def run_plain(runtime: YteamRuntime) -> int:
     """Line-oriented fallback for pipes, CI, and terminals without prompt_toolkit."""
@@ -522,6 +529,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--models", action="store_true", help="list Zen Free models and exit")
     parser.add_argument("--plain", action="store_true", help="use line-oriented fallback")
+    parser.add_argument("--handoff", type=Path, help="display a previous YTEAM context handoff while resuming the durable session")
     args = parser.parse_args()
     if args.models:
         return print_models()
@@ -533,7 +541,10 @@ def main() -> int:
     except ImportError:
         print("prompt_toolkit missing; using --plain fallback", file=sys.stderr)
         return run_plain(runtime)
-    return OpenCodeUI(runtime).run()
+    ui = OpenCodeUI(runtime)
+    if args.handoff:
+        ui.resume_handoff(args.handoff)
+    return ui.run()
 
 
 if __name__ == "__main__":

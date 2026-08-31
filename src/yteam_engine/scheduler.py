@@ -40,15 +40,21 @@ class TokenBucket:
 
     def acquire(self, now: float | None = None) -> bool:
         now = now if now is not None else time.monotonic()
-        self._tokens = min(self.burst, self._tokens + (now - self._updated) * self.rate)
-        self._updated = now
+        self._refill(now)
+        if self.rate <= 0:
+            return False
         if self._tokens >= 1.0:
             self._tokens -= 1.0
             return True
         return False
 
+    def _refill(self, now: float) -> None:
+        self._tokens = min(self.burst, self._tokens + (now - self._updated) * self.rate)
+        self._updated = now
+
     def next_available(self, now: float | None = None) -> float:
         now = now if now is not None else time.monotonic()
+        self._refill(now)
         shortage = 1.0 - self._tokens
         if shortage <= 0:
             return 0.0
@@ -90,6 +96,7 @@ class Scheduler:
         self._lock = threading.RLock()
         self._targets: dict[str, TargetEntry] = {}
         self._buckets: dict[str, TokenBucket] = {}
+        self._active_slots = 0
 
     # -- target registration / bookkeeping --------------------------------
     def register(self, target: str, priority: int = 0, rate_per_second: float | None = None) -> TargetEntry:
@@ -100,6 +107,7 @@ class Scheduler:
                 existing.priority = priority
                 if rate_per_second is not None:
                     existing.rate_per_second = rate_per_second
+                    self._buckets.setdefault(target, TokenBucket(existing.rate_per_second)).rate = max(0.0, float(rate_per_second))
                 return existing
             budget = self.policy.budget_for(target)
             entry = TargetEntry(
@@ -138,7 +146,7 @@ class Scheduler:
     # -- scheduling / rate limiting ---------------------------------------
     def _running_count(self) -> int:
         if self.store is None:
-            return 0
+            return self._active_slots
         running = self.store.list_jobs(statuses=["running"], limit=100)
         return len(running)
 
@@ -155,6 +163,7 @@ class Scheduler:
                 return False
             entry.last_run_at = time.time()
             entry.run_count += 1
+            self._active_slots += 1
             return True
 
     def complete(self, target: str, success: bool) -> None:
@@ -168,6 +177,7 @@ class Scheduler:
                 entry.cool_down_until = now + self.cool_down_seconds
             else:
                 entry.cool_down_until = now + (self.cool_down_seconds * 2)
+            self._active_slots = max(0, self._active_slots - 1)
 
     def mark_blocked(self, target: str, reason: str) -> None:
         with self._lock:

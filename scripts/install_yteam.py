@@ -154,11 +154,25 @@ def ensure_uv() -> str:
     uv = find_uv()
     if uv:
         return uv
-    user_bin = Path.home() / (".local" / "bin" if os.name != "nt" else "AppData" / "Roaming" / "Python" / "Python311" / "Scripts")
-    candidate = user_bin / ("uv.exe" if os.name == "nt" else "uv")
+    user_base = _python_user_base()
+    candidate = user_base / ("Scripts" if os.name == "nt" else "bin") / ("uv.exe" if os.name == "nt" else "uv")
     if candidate.exists():
         return str(candidate)
     raise RuntimeError("uv was installed but is not on PATH; add its user bin directory and run the installer again.")
+
+
+def _python_user_base() -> Path:
+    try:
+        base = subprocess.check_output(
+            [sys.executable, "-c", "import site; print(site.getuserbase())"],
+            text=True,
+            cwd=ROOT,
+        ).strip()
+        return Path(base)
+    except (OSError, subprocess.CalledProcessError):
+        if os.name == "nt":
+            return Path.home() / "AppData" / "Roaming" / "Python" / "Scripts"
+        return Path.home() / ".local"
 
 
 def _path_contains(path_value: str, destination: Path) -> bool:
@@ -211,7 +225,8 @@ def persist_user_path(destination: Path) -> tuple[bool, str]:
 
 def install_dependencies(uv: str, fetch_browser: bool) -> None:
     if not python_in_venv().exists():
-        run_command([uv, "venv", "--python", "3.11", str(VENV)], cwd=ROOT)
+        python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+        run_command([uv, "venv", "--python", python_version, str(VENV)], cwd=ROOT)
     run_command([uv, "pip", "install", "--python", str(python_in_venv()), "-r", str(ROOT / "requirements.txt")], cwd=ROOT)
     if fetch_browser:
         cache = Path(os.environ.get("CAMOUFOX_CACHE", str(ROOT / "runtime" / "cache" / "camoufox"))).expanduser().resolve()
