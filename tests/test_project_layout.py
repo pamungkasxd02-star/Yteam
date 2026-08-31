@@ -372,6 +372,22 @@ class StandaloneYteamTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("standalone YTEAM", result.stdout)
 
+    def test_opencode_style_tui_constructs_both_visual_states(self) -> None:
+        from yteam_runtime import YteamRuntime
+        from yteam_tui import OpenCodeUI
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("yteam_runtime.discover_free_models", return_value=["model-test"]):
+                runtime = YteamRuntime(Path(directory))
+                ui = OpenCodeUI(runtime)
+            self.assertIsNotNone(ui.app)
+            self.assertFalse(ui.state.snapshot()["workspace"])
+            self.assertIn("YTEAM Security Agent", "".join(text for _, text in ui._sidebar_text()))
+            self.assertIn("model-test", "".join(text for _, text in ui._model_line()))
+            ui.state.add("user", "oi")
+            self.assertTrue(ui.state.snapshot()["workspace"])
+            self.assertIn("oi", "".join(text for _, text in ui._transcript_text()))
+
     def test_ci_and_ignore_contract_are_standalone(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")

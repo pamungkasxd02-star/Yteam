@@ -65,8 +65,34 @@ Commands:
 /bb <authorized-http-target>  run the scoped read-only assessment
 /jobs                         show durable jobs/checkpoints
 /skills                       show full skill/risk/source summary
+/engine                       show policy/scheduler/planner/knowledge state
+/plan <authorized-target>    build an adaptive read-only plan
+/ctx                          show context usage/compaction/handoff state
 /quit                         exit
 ```
+
+The default TUI is a full-screen OpenCode-style workspace implemented with
+`prompt_toolkit`. Before the first message it shows a centered YTEAM logo,
+composer, active model, shortcut hints, tip, working directory, MCP status, and
+version. After the first message it changes to the working layout:
+
+```text
+┌──────────────────────────────────────────────┬─────────────────────┐
+│                                              │ YTEAM Security Agent│
+│              session transcript              │ Context             │
+│   user prompts, streamed answers, JSON/logs   │ MCP / LSP           │
+│                                              │ Memory              │
+│                                              │ working directory   │
+│  ▌ composer: Ask anything...                 │                     │
+│    Bb auto · <model> YTEAM                   │                     │
+│  esc interrupt              ctrl+p commands  │                     │
+└──────────────────────────────────────────────┴─────────────────────┘
+```
+
+`Enter` submits, `Ctrl+J` inserts a newline, arrow keys use input history,
+`Ctrl+P` opens the slash-command palette, `PageUp/PageDown` scroll the
+transcript, and `Escape` interrupts an active model stream. `--plain` remains
+available for pipes, CI, and non-interactive SSH sessions.
 
 `/bb` drives the native pipeline:
 

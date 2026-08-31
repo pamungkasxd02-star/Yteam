@@ -14,6 +14,7 @@ under their respective licenses.
 | Uvicorn | https://github.com/encode/uvicorn | BSD-3-Clause |
 | Playwright Python | https://github.com/microsoft/playwright-python | Apache-2.0 |
 | MCP Python SDK | https://github.com/modelcontextprotocol/python-sdk | MIT |
+| prompt_toolkit | https://github.com/prompt-toolkit/python-prompt-toolkit | BSD-3-Clause |
 
 The YTEAM source files are licensed under the repository `LICENSE`. No vendor
 checkout, generated runtime data, engagement evidence, or model credentials
