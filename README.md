@@ -47,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/pamungkasxd02-star/Yteam/main/insta
 Windows PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/pamungkasxd02-star/Yteam/main/install.ps1 | iex
+curl.exe -fsSL https://raw.githubusercontent.com/pamungkasxd02-star/Yteam/main/install.ps1 | powershell.exe -NoProfile -ExecutionPolicy Bypass -Command -
 ```
 
 Set `YTEAM_HOME` to choose another checkout location. The bootstrapper

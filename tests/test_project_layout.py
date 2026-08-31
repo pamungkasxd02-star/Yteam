@@ -493,6 +493,7 @@ class StandaloneYteamTests(unittest.TestCase):
         self.assertTrue((ROOT / "uninstall.sh").exists())
         self.assertTrue((SCRIPTS / "yteam_uninstall.py").exists())
         self.assertIn("--repair", installer)
+        self.assertIn("run the real installer locally", (ROOT / "install.ps1").read_text(encoding="utf-8"))
         import install_yteam
 
         launcher = install_yteam.launcher_text(ROOT)
