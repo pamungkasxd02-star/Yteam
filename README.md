@@ -168,6 +168,8 @@ Inside the TUI:
 | `/approvals` | Show durable tool approval requests |
 | `/approve <id>` | Approve one reviewed tool action |
 | `/deny <id>` | Deny one reviewed tool action |
+| `/agents` | Show autonomous checkpoints, generations, and pending actions |
+| `/cancel <job-id>` | Stop an autonomous job at its next safe checkpoint |
 | `/quit` | Exit |
 
 ## Durable assessment worker
@@ -197,6 +199,15 @@ The built-in workflow performs exact scope validation, bounded deep recon,
 artifact analysis, and evidence-readiness triage. A failed prerequisite blocks
 its dependents, an unmet approval pauses the run, and hard round/action budgets
 prevent an unbounded loop.
+
+After artifact analysis, an observation planner adds only reviewed track tools
+that match the eligible signals (authorization, injection, or surface review),
+then attaches triage to those new dependencies. Every action writes a durable
+checkpoint containing the action graph, completed observations, pending work,
+round, and planning generation. A worker restart resumes that exact graph.
+Approving a paused action re-queues its job automatically and consumes the
+approval exactly once; `/cancel` stops queued work immediately or running work
+at the next checkpoint.
 
 ## Context guard
 

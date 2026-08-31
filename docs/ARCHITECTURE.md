@@ -109,6 +109,14 @@ Every transition emits replayable `agent.*` and `tool.*` events. A report-ready
 observation remains a manual review decision; autonomous report submission is
 not part of the registry.
 
+The graph is checkpointed after every transition. Its serialized state includes
+the complete reviewed action set, pending actions, bounded observations, round,
+and planning generation. Observation-driven replanning may append registered
+actions but cannot rewrite completed history or invent a tool. Approval records
+bind to an exact job and action; approval resumes that checkpoint and is
+consumed after one successful execution. Cancellation is cooperative at action
+boundaries so evidence files and the event ledger remain consistent.
+
 ## Memory lifecycle
 
 ```text

@@ -35,7 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 COMMANDS = (
     "/help", "/models", "/model", "/status", "/history", "/clear", "/memory",
     "/events", "/jobs", "/skills", "/engine", "/plan", "/ctx", "/learn",
-    "/verify", "/bb", "/auto", "/approvals", "/approve", "/deny", "/doctor", "/quit",
+    "/verify", "/bb", "/auto", "/agents", "/approvals", "/approve", "/deny", "/cancel", "/doctor", "/quit",
 )
 
 
@@ -397,6 +397,8 @@ class OpenCodeUI:
         except Exception:  # noqa: BLE001
             tokens, ratio = 0, 0.0
         memory = runtime.get("memory", {})
+        agents = runtime.get("agents", {})
+        latest = agents.get("latest", {}) if isinstance(agents, dict) else {}
         lines = [
             ("class:heading", " YTEAM Security Agent\n"),
             ("class:muted", f" Session {str(runtime.get('session_id', ''))[:20]}\n\n"),
@@ -406,6 +408,11 @@ class OpenCodeUI:
             ("class:success", " • "), ("class:user", "yteam "), ("class:muted", "Connected\n\n"),
             ("class:heading", " Memory\n"),
             ("class:muted", f" {memory.get('verified', 0)} verified  ·  {memory.get('proposals', 0)} pending\n\n"),
+            ("class:heading", " Autonomous Agent\n"),
+            ("class:success" if latest.get("status") in {"running", "completed"} else "class:warning", " • "),
+            ("class:user", f"{latest.get('status', 'idle')} "),
+            ("class:muted", f"r{latest.get('round', 0)} · g{latest.get('generation', 0)} · {latest.get('pending', 0)} pending\n"),
+            ("class:muted", f" {agents.get('active_jobs', 0)} jobs · {agents.get('pending_approvals', 0)} approvals\n\n"),
             ("class:muted", f" {ROOT}\n\n"),
             ("class:success", " • "), ("class:user", "YTEAM "), ("class:muted", "0.2.0\n"),
         ]

@@ -72,11 +72,25 @@ CREATE TABLE IF NOT EXISTS approvals (
     reason TEXT NOT NULL,
     arguments TEXT NOT NULL DEFAULT '{}',
     status TEXT NOT NULL DEFAULT 'pending',
+    job_id TEXT NOT NULL DEFAULT '',
+    action_id TEXT NOT NULL DEFAULT '',
     decided_by TEXT NOT NULL DEFAULT '',
     created_at REAL NOT NULL,
-    decided_at REAL NOT NULL DEFAULT 0
+    decided_at REAL NOT NULL DEFAULT 0,
+    consumed_at REAL NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status, created_at);
+CREATE TABLE IF NOT EXISTS agent_runs (
+    job_id TEXT PRIMARY KEY,
+    target TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running',
+    checkpoint TEXT NOT NULL DEFAULT '{}',
+    cancel_requested INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status, updated_at);
 """
 
 
@@ -89,6 +103,19 @@ class StateStore:
         self._lock = threading.RLock()
         with self._connection() as connection:
             connection.executescript(SCHEMA)
+            self._migrate(connection)
+
+    @staticmethod
+    def _migrate(connection: sqlite3.Connection) -> None:
+        """Apply additive migrations for databases created by older YTEAM builds."""
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(approvals)").fetchall()}
+        for name, declaration in (
+            ("job_id", "TEXT NOT NULL DEFAULT ''"),
+            ("action_id", "TEXT NOT NULL DEFAULT ''"),
+            ("consumed_at", "REAL NOT NULL DEFAULT 0"),
+        ):
+            if name not in columns:
+                connection.execute(f"ALTER TABLE approvals ADD COLUMN {name} {declaration}")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=15, check_same_thread=False)
@@ -261,7 +288,7 @@ class StateStore:
             return cursor.rowcount == 1
 
     def update_job(self, job_id: str, *, status: str | None = None, phase: str | None = None, result: dict[str, object] | None = None, error: str | None = None, available_at: float | None = None, worker_id: str | None = None) -> dict[str, object] | None:
-        allowed = {"queued", "running", "completed", "failed", "cancelled"}
+        allowed = {"queued", "running", "waiting_approval", "completed", "failed", "cancelled"}
         if status is not None and status not in allowed:
             raise ValueError(f"invalid job status: {status}")
         fields: list[str] = []
@@ -282,7 +309,16 @@ class StateStore:
             connection.execute(f"UPDATE jobs SET {', '.join(fields)} WHERE id=?", values)
         return self.job(job_id)
 
-    def create_approval(self, tool_name: str, target: str, reason: str, arguments: dict[str, object]) -> dict[str, object]:
+    def create_approval(
+        self,
+        tool_name: str,
+        target: str,
+        reason: str,
+        arguments: dict[str, object],
+        *,
+        job_id: str = "",
+        action_id: str = "",
+    ) -> dict[str, object]:
         """Create one redacted, durable approval request for a tool action."""
         import secrets
 
@@ -293,13 +329,15 @@ class StateStore:
         created_at = time.time()
         with self._lock, self._connection() as connection:
             connection.execute(
-                "INSERT INTO approvals(id, tool_name, target, reason, arguments, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO approvals(id, tool_name, target, reason, arguments, job_id, action_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     approval_id,
                     redact_text(tool_name),
                     redact_text(target),
                     redact_text(reason),
                     json.dumps(safe_arguments, sort_keys=True),
+                    redact_text(job_id),
+                    redact_text(action_id),
                     created_at,
                 ),
             )
@@ -319,9 +357,12 @@ class StateStore:
             "reason": row["reason"],
             "arguments": json.loads(row["arguments"]),
             "status": row["status"],
+            "job_id": row["job_id"],
+            "action_id": row["action_id"],
             "decided_by": row["decided_by"],
             "created_at": row["created_at"],
             "decided_at": row["decided_at"],
+            "consumed_at": row["consumed_at"],
         }
 
     def list_approvals(self, status: str | None = None, limit: int = 20) -> list[dict[str, object]]:
@@ -353,4 +394,104 @@ class StateStore:
         resolved = self.approval(approval_id)
         if resolved is None:  # pragma: no cover - impossible after successful update
             raise ValueError(f"approval disappeared: {approval_id}")
+        job_id = str(resolved.get("job_id", ""))
+        if job_id:
+            with self._lock, self._connection() as connection:
+                if status == "approved":
+                    connection.execute(
+                        "UPDATE jobs SET status='queued', phase='approval_resolved', worker_id='', available_at=?, updated_at=? WHERE id=? AND status='waiting_approval'",
+                        (now, now, job_id),
+                    )
+                else:
+                    connection.execute(
+                        "UPDATE jobs SET status='failed', phase='approval_denied', worker_id='', error=?, updated_at=? WHERE id=? AND status='waiting_approval'",
+                        (f"operator denied approval {approval_id}", now, job_id),
+                    )
         return resolved
+
+    def approval_for_action(self, job_id: str, action_id: str) -> dict[str, object] | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM approvals WHERE job_id=? AND action_id=? ORDER BY created_at DESC LIMIT 1",
+                (job_id, action_id),
+            ).fetchone()
+        return self._approval_row(row) if row else None
+
+    def consume_approval(self, approval_id: str) -> bool:
+        with self._lock, self._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE approvals SET consumed_at=? WHERE id=? AND status='approved' AND consumed_at=0",
+                (time.time(), approval_id),
+            )
+        return cursor.rowcount == 1
+
+    def save_agent_checkpoint(self, job_id: str, target: str, status: str, checkpoint: dict[str, object]) -> dict[str, object]:
+        safe = redact_value(checkpoint)
+        if not isinstance(safe, dict):
+            safe = {}
+        now = time.time()
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO agent_runs(job_id, target, status, checkpoint, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    target=excluded.target,
+                    status=excluded.status,
+                    checkpoint=excluded.checkpoint,
+                    revision=agent_runs.revision+1,
+                    updated_at=excluded.updated_at
+                """,
+                (job_id, redact_text(target), status, json.dumps(safe, sort_keys=True), now, now),
+            )
+        return self.agent_run(job_id) or {"job_id": job_id, "status": status, "checkpoint": safe}
+
+    def agent_run(self, job_id: str) -> dict[str, object] | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT * FROM agent_runs WHERE job_id=?", (job_id,)).fetchone()
+        if not row:
+            return None
+        return {
+            "job_id": row["job_id"],
+            "target": row["target"],
+            "status": row["status"],
+            "checkpoint": json.loads(row["checkpoint"]),
+            "cancel_requested": bool(row["cancel_requested"]),
+            "revision": row["revision"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    def list_agent_runs(self, limit: int = 20) -> list[dict[str, object]]:
+        bounded = max(1, min(int(limit), 100))
+        with self._lock, self._connection() as connection:
+            rows = connection.execute("SELECT job_id FROM agent_runs ORDER BY updated_at DESC LIMIT ?", (bounded,)).fetchall()
+        return [item for row in rows if (item := self.agent_run(str(row["job_id"]))) is not None]
+
+    def request_job_cancel(self, job_id: str) -> dict[str, object]:
+        now = time.time()
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT status FROM jobs WHERE id=?", (job_id,)).fetchone()
+            if not row:
+                raise ValueError(f"job not found: {job_id}")
+            status = str(row["status"])
+            if status in {"completed", "failed", "cancelled"}:
+                raise ValueError(f"job is already {status}: {job_id}")
+            if status in {"queued", "waiting_approval"}:
+                connection.execute(
+                    "UPDATE jobs SET status='cancelled', phase='cancelled', worker_id='', updated_at=? WHERE id=?",
+                    (now, job_id),
+                )
+                connection.execute(
+                    "UPDATE agent_runs SET status='cancelled', updated_at=? WHERE job_id=?",
+                    (now, job_id),
+                )
+            connection.execute(
+                "UPDATE agent_runs SET cancel_requested=1, updated_at=? WHERE job_id=?",
+                (now, job_id),
+            )
+        return self.job(job_id) or {"id": job_id, "status": "cancelled"}
+
+    def agent_cancel_requested(self, job_id: str) -> bool:
+        run = self.agent_run(job_id)
+        return bool(run and run["cancel_requested"])

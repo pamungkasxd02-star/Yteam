@@ -151,6 +151,9 @@ class StandaloneYteamTests(unittest.TestCase):
             self.assertIn("Queued autonomous assessment", runtime.command("/auto https://authorized.test"))
             auto_job = runtime.state.list_jobs(limit=1)[0]
             self.assertEqual(auto_job["kind"], "autonomous_assessment")
+            runtime.state.save_agent_checkpoint(auto_job["id"], auto_job["target"], "running", {"rounds": 1, "generation": 1, "pending_actions": []})
+            self.assertIn(auto_job["id"], runtime.command("/agents"))
+            self.assertIn("Cancelled", runtime.command(f"/cancel {auto_job['id']}"))
             approval = runtime.state.create_approval("reviewed.tool", "https://authorized.test", "test", {})
             self.assertIn(approval["id"], runtime.command("/approvals"))
             self.assertIn("is now approved", runtime.command(f"/approve {approval['id']}"))
@@ -160,6 +163,7 @@ class StandaloneYteamTests(unittest.TestCase):
             self.assertIn("model.selected", events)
             self.assertIn("bb.admitted", events)
             self.assertIn("agent.admitted", events)
+            self.assertIn("agent.cancel_requested", events)
             self.assertIn("approval.resolved", events)
 
     def test_autonomous_workflow_runs_reviewed_actions_and_writes_summary(self) -> None:
@@ -186,9 +190,48 @@ class StandaloneYteamTests(unittest.TestCase):
             with patch("yteam_scope.validate", return_value=ScopeDecision()), patch("yteam_hunt.run", side_effect=fake_hunt):
                 result = run("https://authorized.test", output, "pipeline-1", {}, store, "job-1")
             self.assertEqual(result["status"], "completed")
-            self.assertEqual([item["status"] for item in result["results"]], ["completed"] * 4)
+            self.assertEqual([item["status"] for item in result["results"]], ["completed"] * 5)
+            self.assertEqual(result["generation"], 1)
             self.assertTrue((output / "autonomy.json").exists())
             self.assertIn("agent.completed", [item["kind"] for item in store.events("job-1")])
+
+    def test_agent_checkpoint_and_queued_job_cancellation_are_durable(self) -> None:
+        from yteam_state import StateStore
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = StateStore(Path(directory) / "state.db")
+            job = store.create_job("https://authorized.test", kind="autonomous_assessment")
+            checkpoint = store.save_agent_checkpoint(job["id"], job["target"], "running", {"rounds": 2, "pending_actions": [{"id": "next"}]})
+            self.assertEqual(checkpoint["revision"], 0)
+            self.assertEqual(store.agent_run(job["id"])["checkpoint"]["rounds"], 2)
+            cancelled = store.request_job_cancel(job["id"])
+            self.assertEqual(cancelled["status"], "cancelled")
+            self.assertTrue(store.agent_cancel_requested(job["id"]))
+
+            waiting = store.create_job("https://authorized.test", kind="autonomous_assessment")
+            store.update_job(waiting["id"], status="waiting_approval", phase="approval")
+            approval = store.create_approval("reviewed", waiting["target"], "fixture", {}, job_id=waiting["id"], action_id="risk")
+            store.resolve_approval(approval["id"], "approved")
+            self.assertEqual(store.job(waiting["id"])["status"], "queued")
+            self.assertEqual(store.job(waiting["id"])["phase"], "approval_resolved")
+
+    def test_state_store_migrates_v1_approval_table(self) -> None:
+        import sqlite3
+
+        from yteam_state import StateStore
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.db"
+            connection = sqlite3.connect(path)
+            connection.execute(
+                "CREATE TABLE approvals (id TEXT PRIMARY KEY, tool_name TEXT NOT NULL, target TEXT NOT NULL, reason TEXT NOT NULL, arguments TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'pending', decided_by TEXT NOT NULL DEFAULT '', created_at REAL NOT NULL, decided_at REAL NOT NULL DEFAULT 0)"
+            )
+            connection.commit()
+            connection.close()
+            store = StateStore(path)
+            approval = store.create_approval("reviewed", "example.com", "fixture", {}, job_id="job-1", action_id="a1")
+            self.assertEqual(approval["job_id"], "job-1")
+            self.assertIn("consumed_at", approval)
 
     def test_memory_requires_verification_before_prompt_context(self) -> None:
         from yteam_memory import LearningMemory

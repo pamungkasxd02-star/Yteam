@@ -368,6 +368,67 @@ class EngineAutonomyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             agent.run("example.com", [Action("a", "x", depends_on=("missing",))])
 
+    def test_observation_replanning_adds_and_executes_actions(self) -> None:
+        from yteam_engine import Action, AutonomousAgent, ToolRegistry, ToolSpec
+        from yteam_engine.policy import Policy
+
+        calls: list[str] = []
+        registry = ToolRegistry(Policy.default())
+        registry.register(ToolSpec("observe", "observe", "read", lambda payload: calls.append("observe") or {"signal": True}))
+        registry.register(ToolSpec("review", "review", "read", lambda payload: calls.append("review") or {"objective_met": True}))
+
+        def replan(run, pending):
+            if any(item.action_id == "observe" and item.status == "completed" for item in run.results):
+                return [Action("review", "review", depends_on=("observe",))]
+            return []
+
+        agent = AutonomousAgent(registry, replan_handler=replan)
+        run = agent.run("example.com", [Action("observe", "observe")])
+        self.assertEqual(run.status, "completed")
+        self.assertEqual(run.generation, 1)
+        self.assertEqual(calls, ["observe", "review"])
+
+    def test_approval_checkpoint_resumes_exact_action_once(self) -> None:
+        from yteam_engine import Action, AutonomousAgent, ToolRegistry, ToolSpec
+        from yteam_engine.policy import Policy
+        from yteam_state import StateStore
+
+        policy = Policy({"schema_version": 1, "default_side_effect": "write", "per_target_rate": 1.0, "targets": {}})
+        checkpoints: list[dict[str, object]] = []
+        calls = {"count": 0}
+        with tempfile.TemporaryDirectory() as directory:
+            store = StateStore(Path(directory) / "state.db")
+            registry = ToolRegistry(policy, approval_store=store)
+            registry.register(ToolSpec("reviewed", "reviewed", "write", lambda payload: calls.__setitem__("count", calls["count"] + 1) or {"objective_met": True}, requires_approval=True))
+            first = AutonomousAgent(registry, checkpoint_handler=checkpoints.append).run(
+                "example.com",
+                [Action("risk", "reviewed")],
+                context={"job_id": "job-1"},
+            )
+            self.assertEqual(first.status, "waiting_approval")
+            approval = store.approval_for_action("job-1", "risk")
+            self.assertIsNotNone(approval)
+            store.resolve_approval(str(approval["id"]), "approved")
+            second = AutonomousAgent(registry, checkpoint_handler=checkpoints.append).run(
+                "example.com",
+                [Action("risk", "reviewed")],
+                context={"job_id": "job-1"},
+                checkpoint=checkpoints[-1],
+            )
+            self.assertEqual(second.status, "completed")
+            self.assertEqual(calls["count"], 1)
+            self.assertGreater(store.approval(str(approval["id"]))["consumed_at"], 0)
+
+    def test_cancel_handler_stops_before_next_action(self) -> None:
+        from yteam_engine import Action, AutonomousAgent, ToolRegistry, ToolSpec
+        from yteam_engine.policy import Policy
+
+        registry = ToolRegistry(Policy.default())
+        registry.register(ToolSpec("safe", "safe", "read", lambda payload: {"ok": True}))
+        run = AutonomousAgent(registry, cancel_handler=lambda: True).run("example.com", [Action("safe", "safe")])
+        self.assertEqual(run.status, "cancelled")
+        self.assertEqual(run.results, [])
+
 
 class EngineContextGuardTests(unittest.TestCase):
     def _messages(self, count: int) -> list[dict[str, str]]:

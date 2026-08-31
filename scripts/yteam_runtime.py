@@ -102,6 +102,7 @@ class YteamRuntime:
             "/plan": lambda _: self.plan_text(""),
             "/ctx": lambda _: self.ctx_text(),
             "/approvals": lambda _: self.approvals_text(),
+            "/agents": lambda _: self.agents_text(),
         }
 
     def _load_profile_prompt(self) -> str:
@@ -130,6 +131,8 @@ class YteamRuntime:
             "/approvals               show durable operator approval requests",
             "/approve <id>            approve one reviewed tool request",
             "/deny <id>               deny one reviewed tool request",
+            "/agents                  show live durable agent checkpoints",
+            "/cancel <job-id>         request safe cancellation at a checkpoint",
             "/ctx                     show context-guard status (auto-compaction + handoff)",
             "/learn <lesson>          propose a redacted lesson for verification",
             "/verify <proposal-id>    promote one proposal into verified context",
@@ -208,6 +211,34 @@ class YteamRuntime:
             f"{item['id']} [{item['status']}] {item['tool_name']} target={item['target']} reason={item['reason'][:100]}"
             for item in items
         )
+
+    def agents_text(self) -> str:
+        items = self.state.list_agent_runs(limit=12)
+        if not items:
+            return "No autonomous agent checkpoints."
+        lines = []
+        for item in items:
+            checkpoint = dict(item.get("checkpoint", {}))
+            pending = checkpoint.get("pending_actions", [])
+            lines.append(
+                f"{item['job_id']} [{item['status']}] generation={checkpoint.get('generation', 0)} "
+                f"round={checkpoint.get('rounds', 0)} pending={len(pending) if isinstance(pending, list) else 0} "
+                f"target={item['target']}"
+            )
+        return "\n".join(lines)
+
+    def cancel_job(self, value: str) -> str:
+        job_id = value.strip()
+        if not job_id:
+            return "Usage: /cancel <job-id>"
+        try:
+            job = self.state.request_job_cancel(job_id)
+        except ValueError as error:
+            return f"Cancellation failed: {error}"
+        self.events.emit("agent.cancel_requested", job_id, {"status": job.get("status"), "phase": job.get("phase")})
+        if job.get("status") == "cancelled":
+            return f"Cancelled {job_id} before its next action."
+        return f"Cancellation requested for {job_id}; it will stop at the next safe checkpoint."
 
     def resolve_approval(self, value: str, decision: str) -> str:
         approval_id = value.strip()
@@ -341,6 +372,8 @@ class YteamRuntime:
             return self.resolve_approval(message[9:], "approved")
         if message.startswith("/deny "):
             return self.resolve_approval(message[6:], "denied")
+        if message.startswith("/cancel "):
+            return self.cancel_job(message[8:])
         if message == "/quit":
             self.quit_requested = True
             self.events.emit("runtime.quit", self.session.session_id)
@@ -384,4 +417,31 @@ class YteamRuntime:
         self.events.emit("chat.completed", self.selected_model)
 
     def snapshot(self) -> dict[str, object]:
-        return {"model": self.selected_model, "provider": self.config["provider"], "session_id": self.session.session_id, "message_count": len(self.session.messages), "event_count": self.events.store.counts(self.events.aggregate_id)["events"], "memory": self.memory.summary(), "policy": self.policy.__dict__}
+        agents = self.state.list_agent_runs(limit=4)
+        jobs = self.state.list_jobs(limit=8)
+        approvals = self.state.list_approvals(status="pending", limit=20)
+        latest = agents[0] if agents else {}
+        checkpoint = dict(latest.get("checkpoint", {})) if latest else {}
+        pending = checkpoint.get("pending_actions", [])
+        return {
+            "model": self.selected_model,
+            "provider": self.config["provider"],
+            "session_id": self.session.session_id,
+            "message_count": len(self.session.messages),
+            "event_count": self.events.store.counts(self.events.aggregate_id)["events"],
+            "memory": self.memory.summary(),
+            "policy": self.policy.__dict__,
+            "agents": {
+                "total": len(agents),
+                "active_jobs": sum(1 for item in jobs if item["status"] in {"queued", "running", "waiting_approval"}),
+                "pending_approvals": len(approvals),
+                "latest": {
+                    "job_id": latest.get("job_id", ""),
+                    "status": latest.get("status", "idle"),
+                    "round": checkpoint.get("rounds", 0),
+                    "generation": checkpoint.get("generation", 0),
+                    "pending": len(pending) if isinstance(pending, list) else 0,
+                    "target": latest.get("target", ""),
+                },
+            },
+        }

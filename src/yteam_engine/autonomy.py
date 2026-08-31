@@ -21,12 +21,24 @@ from .policy import Policy, PolicyViolation, SIDE_EFFECT_RANK
 
 ToolHandler = Callable[[dict[str, object]], dict[str, object]]
 EventHandler = Callable[[str, str, dict[str, object]], None]
+CheckpointHandler = Callable[[dict[str, object]], None]
+CancelHandler = Callable[[], bool]
+ReplanHandler = Callable[["AgentRun", list["Action"]], Iterable["Action"]]
 
 
 class ApprovalStore(Protocol):
     """Narrow durable-store contract used by the engine."""
 
-    def create_approval(self, tool_name: str, target: str, reason: str, arguments: dict[str, object]) -> dict[str, object]: ...
+    def create_approval(
+        self,
+        tool_name: str,
+        target: str,
+        reason: str,
+        arguments: dict[str, object],
+        *,
+        job_id: str = "",
+        action_id: str = "",
+    ) -> dict[str, object]: ...
 
     def approval(self, approval_id: str) -> dict[str, object] | None: ...
 
@@ -60,6 +72,25 @@ class Action:
     depends_on: tuple[str, ...] = ()
     objective: str = ""
 
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "tool": self.tool,
+            "arguments": dict(self.arguments),
+            "depends_on": list(self.depends_on),
+            "objective": self.objective,
+        }
+
+    @classmethod
+    def from_dict(cls, value: dict[str, object]) -> "Action":
+        return cls(
+            id=str(value.get("id", "")),
+            tool=str(value.get("tool", "")),
+            arguments=dict(value.get("arguments", {})),
+            depends_on=tuple(str(item) for item in value.get("depends_on", [])),
+            objective=str(value.get("objective", "")),
+        )
+
 
 @dataclass
 class ToolResult:
@@ -84,6 +115,7 @@ class AgentRun:
     results: list[ToolResult] = field(default_factory=list)
     started_at: float = field(default_factory=time.time)
     finished_at: float = 0.0
+    generation: int = 0
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -94,6 +126,7 @@ class AgentRun:
             "results": [item.as_dict() for item in self.results],
             "started_at": self.started_at,
             "finished_at": self.finished_at,
+            "generation": self.generation,
         }
 
 
@@ -161,7 +194,16 @@ class ToolRegistry:
         except PolicyViolation as error:
             return ToolResult(action.id, action.tool, "blocked", error=str(error))
 
+        execution_context = dict(context or {})
+        job_id = str(execution_context.get("job_id", ""))
         if spec.requires_approval:
+            if self.approval_store and not approval_id and job_id:
+                finder = getattr(self.approval_store, "approval_for_action", None)
+                existing = finder(job_id, action.id) if callable(finder) else None
+                if existing and existing.get("status") == "denied":
+                    return ToolResult(action.id, action.tool, "blocked", error="operator denied approval", approval_id=str(existing["id"]))
+                if existing and existing.get("status") == "approved" and not existing.get("consumed_at"):
+                    approval_id = str(existing["id"])
             approval = self.approval_store.approval(approval_id) if self.approval_store and approval_id else None
             valid = bool(
                 approval
@@ -177,6 +219,8 @@ class ToolRegistry:
                     target,
                     action.objective or spec.description,
                     action.arguments,
+                    job_id=job_id,
+                    action_id=action.id,
                 )
                 return ToolResult(
                     action.id,
@@ -189,7 +233,7 @@ class ToolRegistry:
         payload = {
             "target": target,
             "arguments": dict(action.arguments),
-            "context": dict(context or {}),
+            "context": execution_context,
             "action_id": action.id,
         }
         executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"yteam-{spec.name}")
@@ -199,6 +243,10 @@ class ToolRegistry:
             if not isinstance(output, dict):
                 raise TypeError(f"tool returned {type(output).__name__}, expected dict")
             observation = _bounded(output, spec.max_output_bytes)
+            if approval_id and self.approval_store:
+                consume = getattr(self.approval_store, "consume_approval", None)
+                if callable(consume):
+                    consume(approval_id)
             return ToolResult(
                 action.id,
                 action.tool,
@@ -239,18 +287,51 @@ class AutonomousAgent:
         max_rounds: int = 12,
         max_actions: int = 32,
         event_handler: EventHandler | None = None,
+        checkpoint_handler: CheckpointHandler | None = None,
+        cancel_handler: CancelHandler | None = None,
+        replan_handler: ReplanHandler | None = None,
     ) -> None:
         self.registry = registry
         self.max_rounds = max(1, min(int(max_rounds), 100))
         self.max_actions = max(1, min(int(max_actions), 500))
         self.event_handler = event_handler or (lambda _kind, _detail, _payload: None)
+        self.checkpoint_handler = checkpoint_handler or (lambda _checkpoint: None)
+        self.cancel_handler = cancel_handler or (lambda: False)
+        self.replan_handler = replan_handler
 
     def _emit(self, kind: str, detail: str, payload: dict[str, object] | None = None) -> None:
         self.event_handler(kind, detail, payload or {})
 
-    def run(self, target: str, actions: Iterable[Action], *, context: dict[str, object] | None = None) -> AgentRun:
+    def _checkpoint(self, run: AgentRun, actions: list[Action], pending: list[Action]) -> None:
+        self.checkpoint_handler({
+            **run.as_dict(),
+            "actions": [item.as_dict() for item in actions],
+            "pending_actions": [item.as_dict() for item in pending],
+        })
+
+    def run(
+        self,
+        target: str,
+        actions: Iterable[Action],
+        *,
+        context: dict[str, object] | None = None,
+        checkpoint: dict[str, object] | None = None,
+    ) -> AgentRun:
         run = AgentRun(target=target)
         queue = list(actions)
+        if checkpoint:
+            stored_actions = checkpoint.get("actions", [])
+            if isinstance(stored_actions, list) and stored_actions:
+                queue = [Action.from_dict(item) for item in stored_actions if isinstance(item, dict)]
+            run = AgentRun(
+                target=target,
+                status="running",
+                stop_reason="",
+                rounds=int(checkpoint.get("rounds", 0)),
+                results=[ToolResult(**item) for item in checkpoint.get("results", []) if isinstance(item, dict)],
+                started_at=float(checkpoint.get("started_at", time.time())),
+                generation=int(checkpoint.get("generation", 0)),
+            )
         if len(queue) > self.max_actions:
             queue = queue[: self.max_actions]
         ids = [item.id for item in queue]
@@ -262,10 +343,20 @@ class AutonomousAgent:
             if missing or action.id in action.depends_on:
                 raise ValueError(f"invalid dependencies for {action.id}: {sorted(missing)}")
 
-        self._emit("agent.started", target, {"actions": len(queue), "max_rounds": self.max_rounds})
-        outcomes: dict[str, ToolResult] = {}
-        pending = list(queue)
+        self._emit("agent.resumed" if checkpoint else "agent.started", target, {"actions": len(queue), "max_rounds": self.max_rounds, "generation": run.generation})
+        outcomes: dict[str, ToolResult] = {
+            item.action_id: item
+            for item in run.results
+            if item.status not in {"approval_required"}
+        }
+        stored_pending = checkpoint.get("pending_actions", []) if checkpoint else []
+        pending = [Action.from_dict(item) for item in stored_pending if isinstance(item, dict)] if stored_pending else [item for item in queue if item.id not in outcomes]
+        self._checkpoint(run, queue, pending)
         while pending and run.rounds < self.max_rounds:
+            if self.cancel_handler():
+                run.status = "cancelled"
+                run.stop_reason = "operator cancellation requested"
+                break
             ready = [item for item in pending if all(dep in outcomes for dep in item.depends_on)]
             if not ready:
                 run.status = "blocked"
@@ -274,6 +365,10 @@ class AutonomousAgent:
             run.rounds += 1
             progressed = False
             for action in ready:
+                if self.cancel_handler():
+                    run.status = "cancelled"
+                    run.stop_reason = "operator cancellation requested"
+                    break
                 failed = [dep for dep in action.depends_on if outcomes[dep].status != "completed"]
                 if failed:
                     result = ToolResult(action.id, action.tool, "blocked", error=f"prerequisite did not complete: {failed}")
@@ -281,8 +376,10 @@ class AutonomousAgent:
                     self._emit("tool.started", action.tool, {"action_id": action.id, "round": run.rounds})
                     result = self.registry.execute(action, target, context={**(context or {}), "observations": {key: value.observation for key, value in outcomes.items()}})
                 outcomes[action.id] = result
+                run.results = [item for item in run.results if not (item.action_id == action.id and item.status == "approval_required")]
                 run.results.append(result)
-                pending.remove(action)
+                if result.status != "approval_required":
+                    pending.remove(action)
                 progressed = True
                 self._emit(
                     "tool.completed" if result.status == "completed" else "tool.blocked" if result.status in {"blocked", "approval_required"} else "tool.failed",
@@ -297,13 +394,33 @@ class AutonomousAgent:
                     )
                     run.status = "waiting_approval"
                     run.stop_reason = f"approval required: {result.approval_id}"
-                    pending.clear()
+                    self._checkpoint(run, queue, pending)
                     break
                 if bool(result.observation.get("objective_met")):
                     run.status = "completed"
                     run.stop_reason = f"objective met by {action.id}"
                     pending.clear()
                     break
+                self._checkpoint(run, queue, pending)
+            if run.status in {"waiting_approval", "cancelled", "completed"}:
+                break
+            if self.replan_handler:
+                additions = list(self.replan_handler(run, list(pending)))
+                existing_ids = {item.id for item in queue}
+                additions = [item for item in additions if item.id not in existing_ids]
+                if additions:
+                    if len(queue) + len(additions) > self.max_actions:
+                        additions = additions[: max(0, self.max_actions - len(queue))]
+                    allowed_ids = existing_ids | {item.id for item in additions}
+                    for item in additions:
+                        missing = set(item.depends_on) - allowed_ids
+                        if not item.id or item.id in item.depends_on or missing:
+                            raise ValueError(f"replanner emitted invalid action {item.id!r}: missing={sorted(missing)}")
+                    queue.extend(additions)
+                    pending.extend(additions)
+                    run.generation += 1
+                    self._emit("agent.replanned", str(run.generation), {"added": [item.id for item in additions]})
+                    self._checkpoint(run, queue, pending)
             if not progressed:
                 break
 
@@ -321,5 +438,6 @@ class AutonomousAgent:
                 run.status = "completed"
                 run.stop_reason = "all actions completed"
         run.finished_at = time.time()
+        self._checkpoint(run, queue, pending)
         self._emit("agent.completed", run.status, {"rounds": run.rounds, "results": len(run.results), "reason": run.stop_reason})
         return run

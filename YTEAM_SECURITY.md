@@ -33,6 +33,9 @@ The `/auto` command may coordinate scope validation, bounded recon, artifact
 analysis, and readiness triage through reviewed native tools. It may not turn
 model text into shell commands, expand scope, bypass an approval, or submit a
 report. Unknown actions and failed prerequisites stop or block the run.
+Observation-driven replanning may only append tools already present in the
+reviewed registry. Durable approvals are bound to one job/action and consumed
+once. `/cancel` takes effect at the next safe action checkpoint.
 
 Use native YTEAM tools for network access, browser work, source analysis, evidence, and reporting. There is no second MCP or JSON-RPC layer. The runtime owns terminal execution, memory, skills, browser routing, and evidence handling. Do not pretend that a text-only model inspected an image: rely on the optional isolated browser/OCR path or state that vision is unavailable.
 
@@ -61,7 +64,8 @@ For image or screenshot input:
 The default launcher starts the native YTEAM TUI. It provides `/models`,
 `/model <id>`, `/status`, `/history`, `/clear`, `/memory`, `/events`, `/jobs`,
 `/skills`, `/engine`, `/plan <target>`, `/ctx`, `/doctor`, `/bb <target>`,
-`/auto <target>`, `/approvals`, `/approve <id>`, `/deny <id>`, and
+`/auto <target>`, `/agents`, `/approvals`, `/approve <id>`, `/deny <id>`,
+`/cancel <job-id>`, and
 `/quit`. Model requests go directly to the configured OpenAI-compatible
 endpoint; no gateway or protocol server is started. When the context guard
 reaches its handoff threshold, it writes `runtime/handoffs/HANDOFF_*.md`; the

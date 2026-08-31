@@ -125,10 +125,11 @@ def execute_job(store, job: dict[str, object], worker_id: str) -> dict[str, obje
         return {"pipeline_run_id": "", "output": "", "hunt_status": "policy_blocked", "stages": 0, "error": str(error)}
     pipeline_id, output = _prepare_or_resume(store, job)
     stop = threading.Event()
+    heartbeat_phase = "autonomy" if str(job.get("kind")) == "autonomous_assessment" else "recon"
 
     def heartbeat() -> None:
         while not stop.wait(5):
-            store.heartbeat_job(job_id, worker_id, "recon")
+            store.heartbeat_job(job_id, worker_id, heartbeat_phase)
             try:
                 (ROOT / "runtime" / "worker.lock").touch()
             except OSError:
@@ -144,22 +145,29 @@ def execute_job(store, job: dict[str, object], worker_id: str) -> dict[str, obje
 
             store.update_job(job_id, phase="autonomy")
             result = run_autonomy(target, output, pipeline_id, params, store, job_id)
-            successful = result.get("status") == "completed"
+            autonomy_status = str(result.get("status", "failed"))
+            successful = autonomy_status == "completed"
             summary = {
                 "pipeline_run_id": pipeline_id,
                 "output": str(output),
-                "autonomy_status": result.get("status"),
+                "autonomy_status": autonomy_status,
                 "rounds": result.get("rounds", 0),
                 "actions": len(result.get("results", [])),
                 "stop_reason": result.get("stop_reason", ""),
             }
-            store.update_job(
-                job_id,
-                status="completed" if successful else "failed",
-                phase="triage" if successful else "blocked",
-                result=summary,
-                error="" if successful else str(result.get("stop_reason", "autonomous assessment blocked")),
-            )
+            if autonomy_status == "waiting_approval":
+                store.update_job(job_id, status="waiting_approval", phase="approval", result=summary, error="", worker_id="")
+            elif autonomy_status == "cancelled":
+                store.update_job(job_id, status="cancelled", phase="cancelled", result=summary, error="operator cancellation requested", worker_id="")
+            else:
+                store.update_job(
+                    job_id,
+                    status="completed" if successful else "failed",
+                    phase="triage" if successful else "blocked",
+                    result=summary,
+                    error="" if successful else str(result.get("stop_reason", "autonomous assessment blocked")),
+                    worker_id="",
+                )
         else:
             from yteam_hunt import run as run_hunt
 
