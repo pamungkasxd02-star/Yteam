@@ -454,6 +454,7 @@ class OpenCodeUI:
     def _execute(self, text: str) -> None:
         try:
             if text in {"/quit", "/exit", "/q"}:
+                self._write_quit_marker()
                 self.runtime.quit_requested = True
                 return
             if text.startswith("/"):
@@ -488,6 +489,14 @@ class OpenCodeUI:
         self.app.run()
         return 0
 
+    def _write_quit_marker(self) -> None:
+        """Signal the auto-restart launcher to stop instead of relaunching."""
+        try:
+            (ROOT / "runtime").mkdir(parents=True, exist_ok=True)
+            (ROOT / "runtime" / "quit.marker").write_text("user quit", encoding="utf-8")
+        except OSError:
+            pass
+
     def resume_handoff(self, path: Path) -> None:
         """Display a bounded handoff note without copying raw evidence."""
         try:
@@ -500,12 +509,18 @@ class OpenCodeUI:
 
 def run_plain(runtime: YteamRuntime) -> int:
     """Line-oriented fallback for pipes, CI, and terminals without prompt_toolkit."""
+    quit_marker = ROOT / "runtime" / "quit.marker"
     while True:
         try:
             message = input("YTEAM> ").strip()
         except (EOFError, KeyboardInterrupt):
             break
         if not message or message in {"/quit", "/exit", "/q"}:
+            try:
+                quit_marker.parent.mkdir(parents=True, exist_ok=True)
+                quit_marker.write_text("user quit", encoding="utf-8")
+            except OSError:
+                pass
             break
         result = runtime.command(message)
         if result is not None:

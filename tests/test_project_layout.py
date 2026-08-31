@@ -409,8 +409,12 @@ class StandaloneYteamTests(unittest.TestCase):
         launcher = install_yteam.launcher_text(ROOT)
         if os.name == "nt":
             self.assertIn("runtime\\.venv\\Scripts\\python.exe", launcher)
+            self.assertIn("quit.marker", launcher)
+            self.assertIn(":loop", launcher)
         else:
             self.assertIn("runtime/.venv/bin/python", launcher)
+            self.assertIn("quit.marker", launcher)
+            self.assertIn("while :; do", launcher)
         self.assertNotIn("python3 \"", launcher)
         result = subprocess.run([sys.executable, str(SCRIPTS / "install_yteam.py"), "--dry-run"], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0)

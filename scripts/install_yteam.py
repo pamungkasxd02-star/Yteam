@@ -42,11 +42,56 @@ def default_bin() -> Path:
 
 
 def launcher_text(target: Path) -> str:
+    """Interactive TUI launcher: restart automatically on crash, stop on /quit."""
     python = _quote_command_path(venv_python(target))
     script = _quote_command_path(target / "scripts" / "yteam_tui.py")
+    root = _quote_command_path(target)
     if os.name == "nt":
-        return f'@echo off\n"{python}" "{script}" %*\n'
-    return f'#!/usr/bin/env sh\nset -eu\nexec "{python}" "{script}" "$@"\n'
+        marker = root + "\\runtime\\quit.marker"
+    else:
+        marker = root + "/runtime/quit.marker"
+    if os.name == "nt":
+        return (
+            "@echo off\n"
+            "setlocal\n"
+            f'set "YTEAM_PYTHON={python}"\n'
+            f'set "QUIT_MARKER={marker}"\n'
+            ":loop\n"
+            'del /q "%QUIT_MARKER%" 2>nul\n'
+            f'"%YTEAM_PYTHON%" "{script}" %*\n'
+            "set RC=%ERRORLEVEL%\n"
+            'if exist "%QUIT_MARKER%" (\n'
+            '  del /q "%QUIT_MARKER%" 2>nul\n'
+            "  exit /b 0\n"
+            ")\n"
+            "echo.\n"
+            "echo  [!] YTEAM keluar sendiri (rc=%RC%) - restarting otomatis...\n"
+            "echo  Tekan Ctrl+C berulang kali untuk berhenti.\n"
+            "timeout /t 2 /nobreak >nul\n"
+            "goto loop\n"
+        )
+    return (
+        "#!/usr/bin/env sh\n"
+        "set -eu\n"
+        f'PYTHON="{python}"\n'
+        f'SCRIPT="{script}"\n'
+        f'QUIT_MARKER="{marker}"\n'
+        "while :; do\n"
+        '  rm -f "$QUIT_MARKER"\n'
+        "  set +e\n"
+        '  "$PYTHON" "$SCRIPT" "$@"\n'
+        "  RC=$?\n"
+        "  set -e\n"
+        '  if [ -f "$QUIT_MARKER" ]; then\n'
+        '    rm -f "$QUIT_MARKER"\n'
+        "    exit 0\n"
+        "  fi\n"
+        "  echo ''\n"
+        "  echo \"[!] YTEAM keluar sendiri (rc=$RC) - restarting otomatis...\"\n"
+        "  echo 'Tekan Ctrl+C berulang kali untuk berhenti.'\n"
+        "  sleep 2\n"
+        "done\n"
+    )
 
 
 def control_launcher_text(target: Path) -> str:
@@ -278,12 +323,10 @@ def main() -> int:
         print("Refresh the current terminal once, then run YTEAM:")
         if os.name == "nt":
             current_path = _quote_powershell_path(path.parent)
-            print(f"$env:Path = '{current_path};' + $env:Path")
-            print("yteam")
-            print(f"Or run immediately: & '{_quote_powershell_path(path)}'")
+            print(f"$env:Path = '{current_path};' + $env:Path; yteam")
+            print(f"Or run immediately (no PATH needed): & '{_quote_powershell_path(path)}'")
         else:
-            print(refresh)
-            print("yteam")
+            print(f"{refresh} && yteam")
     return 0
 
 

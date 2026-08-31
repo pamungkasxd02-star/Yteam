@@ -2,8 +2,25 @@
 set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PYTHON="$ROOT/runtime/.venv/bin/python"
+QUIT_MARKER="$ROOT/runtime/quit.marker"
 if [ ! -x "$PYTHON" ]; then
   echo "YTEAM is not installed in this checkout. Run: python3 scripts/install_yteam.py" >&2
   exit 2
 fi
-exec "$PYTHON" "$ROOT/scripts/yteam_tui.py" "$@"
+
+while :; do
+  rm -f "$QUIT_MARKER"
+  set +e
+  "$PYTHON" "$ROOT/scripts/yteam_tui.py" "$@"
+  RC=$?
+  set -e
+  # quit.marker present = user asked to quit, do NOT restart
+  if [ -f "$QUIT_MARKER" ]; then
+    rm -f "$QUIT_MARKER"
+    exit 0
+  fi
+  echo ""
+  echo "[!] YTEAM keluar sendiri (rc=$RC) - restarting otomatis..."
+  echo "Tekan Ctrl+C berulang kali untuk berhenti."
+  sleep 2
+done
