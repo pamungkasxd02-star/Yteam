@@ -222,9 +222,31 @@ scripts/yteam_skills.py   first-party skill registry, risk, bundles
 scripts/yteam_native_tools.py
                              smart pipe, secrets, knowledge, reports
 scripts/yteam_hunt.py      scoped web recon and hypothesis handoff
+scripts/yteam_worker.py    durable worker (now policy-gated + knowledge-logging)
 src/local_solver/          detector, Camoufox adapter, task queue, service
+src/yteam_engine/          composable orchestration core (see below)
 skills/                    first-party native playbooks + catalog.json
 ```
+
+### Engine (`src/yteam_engine/`)
+
+A policy-bound orchestration core layered on the standalone runtime:
+
+| Module | Purpose |
+|---|---|
+| `policy.py` | schema-validated, deny-by-default policy resolution with per-target budgets |
+| `graph.py` | DAG task-graph executor (topological order, deps, retry, policy gate) |
+| `scheduler.py` | durable multi-target scheduler (priority, per-target token-bucket rate, anti-thrash) |
+| `planner.py` | adaptive recon/attack planner (self-tuning state machine over 18 techniques) |
+| `knowledge.py` | knowledge graph + verified lesson ledger with traversal queries |
+| `skill_resolver.py` | plugin/skill runtime resolver (DI, LRU cache, load policy) |
+
+Everything fails closed: the default policy is read-only at 1 req/s and denies
+write/report effects until an explicit, validated policy file grants them. The
+TUI exposes the engine via `/engine` (state snapshot) and `/plan <target>`
+(adaptive plan); the durable worker asserts the policy before running a job and
+records outcomes into the knowledge graph. MCP exposes read-only
+`yteam_engine_status` and `yteam_plan` tools.
 
 The native gate detector classifies anti-bot/WAF responses and stops or slows
 down safely. It does not solve challenges, evade WAFs, rotate identities, or

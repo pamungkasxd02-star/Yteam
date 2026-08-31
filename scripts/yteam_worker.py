@@ -89,6 +89,16 @@ def _prepare_or_resume(store, job: dict[str, object]) -> tuple[str, Path]:
 
 def execute_job(store, job: dict[str, object], worker_id: str) -> dict[str, object]:
     job_id = str(job["id"])
+    target = str(job["target"])
+    # Policy gate: refuse to run a target that exceeds the active engine policy.
+    try:
+        from yteam_engine import Engine
+
+        engine = Engine(ROOT)
+        engine.policy.assert_effect("read", target)
+    except Exception as error:  # noqa: BLE001
+        store.update_job(job_id, status="failed", phase="policy_blocked", error=f"policy: {error}", worker_id="")
+        return {"pipeline_run_id": "", "output": "", "hunt_status": "policy_blocked", "stages": 0, "error": str(error)}
     pipeline_id, output = _prepare_or_resume(store, job)
     stop = threading.Event()
 
@@ -111,10 +121,22 @@ def execute_job(store, job: dict[str, object], worker_id: str) -> dict[str, obje
         )
         summary = {"pipeline_run_id": pipeline_id, "output": str(output), "hunt_status": result.get("status"), "stages": len(result.get("stages", []))}
         store.update_job(job_id, status="completed" if result.get("status") != "blocked" else "failed", phase="triage", result=summary, error="" if result.get("status") != "blocked" else "scope or recon blocked")
+        _log_knowledge(target, result)
         return summary
     finally:
         stop.set()
         thread.join(timeout=2)
+
+
+def _log_knowledge(target: str, result: dict[str, object]) -> None:
+    """Best-effort record the run into the durable knowledge graph."""
+    try:
+        from yteam_engine import Engine
+
+        engine = Engine(ROOT)
+        engine.knowledge.add_node("target", target, {"hunt_status": result.get("status"), "stages": len(result.get("stages", []))})
+    except Exception:  # noqa: BLE001 - knowledge logging must never break the worker
+        pass
 
 
 def run_once(store, worker_id: str) -> bool:

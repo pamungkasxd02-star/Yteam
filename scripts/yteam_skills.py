@@ -40,11 +40,19 @@ def source_roots() -> tuple[Path, ...]:
 
 def risk_for(name: str, text: str) -> str:
     haystack = f"{name} {text[:5000]}".lower()
-    if any(marker in haystack for marker in RISK_RULES["quarantined"]):
+    if _any_word(haystack, RISK_RULES["quarantined"]):
         return "quarantined"
-    if any(marker in haystack for marker in RISK_RULES["controlled"]):
+    if _any_word(haystack, RISK_RULES["controlled"]):
         return "controlled"
     return "safe_reference"
+
+
+def _any_word(haystack: str, markers: tuple[str, ...]) -> bool:
+    """Match markers as whole words so 'surfaces' doesn't trigger 'ssrf'."""
+    for marker in markers:
+        if re.search(rf"(?<![a-z0-9_-]){re.escape(marker)}(?![a-z0-9_-])", haystack):
+            return True
+    return False
 
 
 def sections(text: str) -> list[dict[str, object]]:

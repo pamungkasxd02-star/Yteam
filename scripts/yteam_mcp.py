@@ -15,8 +15,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
+SRC = ROOT / "src"
+for entry in (SCRIPTS, SRC):
+    if str(entry) not in sys.path:
+        sys.path.insert(0, str(entry))
 
 
 def run_server() -> int:
@@ -68,6 +70,27 @@ def run_server() -> int:
         if not path.is_relative_to(allowed_root):
             raise ValueError("target_path must remain under the YTEAM reports directory")
         return aggregate_reports(path)
+
+    @server.tool()
+    def yteam_engine_status() -> dict[str, object]:
+        """Return the engine snapshot: policy, scheduler, planner weights, knowledge graph, skill cache."""
+        from yteam_engine import make_engine
+
+        return make_engine(ROOT).snapshot()
+
+    @server.tool()
+    def yteam_plan(target: str, limit: int = 5) -> dict[str, object]:
+        """Build an adaptive, policy-bound recon/attack plan for an authorized target."""
+        from yteam_engine import Engine, PlannerState, plan_to_dict
+        from yteam_scope import validate
+
+        decision = validate(target)
+        if not decision.allowed:
+            return {"target": target, "allowed": False, "reason": decision.reason, "plan": []}
+        engine = Engine(ROOT)
+        state = PlannerState(target=target)
+        plan = engine.planner.plan(state)
+        return {"target": target, "allowed": True, "plan": plan_to_dict(plan), "note": "Plan is guidance; execute only under scope/rate policy."}
 
     server.run(transport="stdio")
     return 0

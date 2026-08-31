@@ -30,6 +30,8 @@ def run() -> dict[str, object]:
     checks.append(check("localsolver", (ROOT / "scripts" / "localsolver.py").exists(), "Camoufox task service for authorized browser observation"))
     checks.append(check("mcp-server", (ROOT / "scripts" / "yteam_mcp.py").exists(), "native stdio MCP tools and skill registry"))
     checks.append(check("skill-catalog", (ROOT / "skills" / "catalog.json").exists(), "portable first-party security skill metadata catalog"))
+    engine_ok = (ROOT / "src" / "yteam_engine").exists()
+    checks.append(check("engine-core", engine_ok, "composable DAG/scheduler/planner/knowledge/policy/resolver core"))
     for package in ("yaml", "fastapi", "uvicorn", "pydantic", "camoufox", "playwright", "psutil", "rich", "requests", "mcp"):
         present = importlib.util.find_spec(package) is not None
         checks.append(check(f"python:{package}", present, "installed" if present else "missing; run installer", required=package not in {"camoufox", "playwright"}))

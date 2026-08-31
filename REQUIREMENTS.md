@@ -28,6 +28,8 @@ separate UI application.
 
 - Native YTEAM TUI under `scripts/yteam_tui.py`;
 - Native policy, session, event, model, skill, LocalSolver, MCP, and assessment components;
+- the composable orchestration engine under `src/yteam_engine/` (policy, DAG graph,
+  multi-target scheduler, adaptive planner, knowledge graph, skill resolver);
 - YTEAM virtual environment at `runtime/.venv`;
 - every Python dependency pinned in `requirements.txt`;
 - the user-local `yteam`, `yteam-control`, `yteam-worker`, `localsolver`, and `yteam-mcp` launchers.

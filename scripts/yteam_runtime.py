@@ -9,6 +9,7 @@ upstream agent runtime.
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -20,6 +21,10 @@ from yteam_memory import LearningMemory
 from yteam_models import discover_free_models, load_model_config
 from yteam_session import Session
 from yteam_state import StateStore
+
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(_ROOT / "src"))
 
 
 @dataclass
@@ -91,6 +96,8 @@ class YteamRuntime:
             "/events": lambda _: self.events_text(),
             "/jobs": lambda _: self.jobs_text(),
             "/skills": lambda _: self.skills_text(),
+            "/engine": lambda _: self.engine_text(),
+            "/plan": lambda _: self.plan_text(""),
         }
 
     def _load_profile_prompt(self) -> str:
@@ -113,6 +120,8 @@ class YteamRuntime:
             "/events                  show the latest replayable runtime events",
             "/jobs                    show durable assessment jobs and checkpoints",
             "/skills                  show indexed skill/risk summary",
+            "/engine                  show policy, scheduler, planner, knowledge, resolver state",
+            "/plan <target>           build an adaptive recon/attack plan for an authorized target",
             "/learn <lesson>          propose a redacted lesson for verification",
             "/verify <proposal-id>    promote one proposal into verified context",
             "/bb <authorized-target> run the scoped read-only security pipeline",
@@ -129,6 +138,13 @@ class YteamRuntime:
     def status_text(self) -> str:
         counts = self.events.store.counts(self.events.aggregate_id)
         jobs = self.state.list_jobs(limit=8)
+        engine = {}
+        try:
+            from yteam_engine import Engine
+
+            engine = Engine(self.root).snapshot()
+        except Exception:  # noqa: BLE001
+            engine = {"error": "engine unavailable"}
         return json.dumps({
             "product": "YTEAM",
             "runtime": "standalone",
@@ -139,6 +155,7 @@ class YteamRuntime:
             "event_count": counts["events"],
             "memory": self.memory.summary(),
             "policy": self.policy.__dict__,
+            "engine": engine,
             "jobs": [{"id": job["id"], "status": job["status"], "phase": job["phase"], "target": job["target"]} for job in jobs],
         }, indent=2)
 
@@ -180,6 +197,22 @@ class YteamRuntime:
         items = registry()
         risk = {name: sum(1 for item in items if item.get("risk") == name) for name in ("safe_reference", "controlled", "quarantined")}
         return json.dumps({"skill_count": len(items), "risk": risk, "sources": sorted({str(item.get('source')) for item in items})}, indent=2)
+
+    def engine_text(self) -> str:
+        from yteam_engine import engine_status
+
+        return engine_status(self.root)
+
+    def plan_text(self, value: str) -> str:
+        from yteam_engine import AdaptivePlanner, Engine, PlannerState, StepResult, plan_to_dict
+
+        target = value.strip()
+        engine = Engine(self.root)
+        state = PlannerState(target=target or "authorized-target.example")
+        plan = engine.planner.plan(state)
+        if not plan:
+            return "No plan steps are allowed under the active policy for this target."
+        return json.dumps({"target": state.target, "plan": plan_to_dict(plan), "note": "Plan is guidance; execute only against authorized targets under scope/rate policy."}, indent=2)
 
     def learn(self, value: str) -> str:
         try:
@@ -223,6 +256,10 @@ class YteamRuntime:
             return self.learn(message[7:])
         if message.startswith("/verify "):
             return self.verify_learning(message[8:])
+        if message.startswith("/plan "):
+            return self.plan_text(message[6:])
+        if message == "/plan":
+            return self.plan_text("")
         if message.startswith("/doctor"):
             from yteam_doctor import run
             return json.dumps(run(), indent=2)
