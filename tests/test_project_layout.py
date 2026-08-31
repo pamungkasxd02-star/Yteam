@@ -148,11 +148,47 @@ class StandaloneYteamTests(unittest.TestCase):
             self.assertIn("Active model: model-b", runtime.command("/model model-b"))
             self.assertIn("Queued durable read-only", runtime.command("/bb https://authorized.test"))
             self.assertEqual(runtime.state.list_jobs(limit=1)[0]["target"], "https://authorized.test")
+            self.assertIn("Queued autonomous assessment", runtime.command("/auto https://authorized.test"))
+            auto_job = runtime.state.list_jobs(limit=1)[0]
+            self.assertEqual(auto_job["kind"], "autonomous_assessment")
+            approval = runtime.state.create_approval("reviewed.tool", "https://authorized.test", "test", {})
+            self.assertIn(approval["id"], runtime.command("/approvals"))
+            self.assertIn("is now approved", runtime.command(f"/approve {approval['id']}"))
             self.assertIn("Goodbye", runtime.command("/quit"))
             self.assertTrue(runtime.quit_requested)
             events = (root / "runtime" / "events.jsonl").read_text(encoding="utf-8")
             self.assertIn("model.selected", events)
             self.assertIn("bb.admitted", events)
+            self.assertIn("agent.admitted", events)
+            self.assertIn("approval.resolved", events)
+
+    def test_autonomous_workflow_runs_reviewed_actions_and_writes_summary(self) -> None:
+        from yteam_autonomy import run
+        from yteam_state import StateStore
+
+        class ScopeDecision:
+            allowed = True
+            mode = "fixture"
+            reason = "authorized test fixture"
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "run"
+            output.mkdir()
+
+            def fake_hunt(target, path, pipeline_id, depth, rate, use_external, scan, scope_file):
+                (path / "hypotheses.json").write_text(json.dumps({"hypotheses": [{"id": "h1"}]}), encoding="utf-8")
+                (path / "track_plan.json").write_text(json.dumps({"tracks": [{"track": "authorization", "status": "eligible"}]}), encoding="utf-8")
+                (path / "recon.json").write_text(json.dumps({"routes": [{"url": target}]}), encoding="utf-8")
+                return {"status": "ready_for_analysis", "stages": [{"name": "scope"}], "tool_runs": []}
+
+            store = StateStore(root / "state.db")
+            with patch("yteam_scope.validate", return_value=ScopeDecision()), patch("yteam_hunt.run", side_effect=fake_hunt):
+                result = run("https://authorized.test", output, "pipeline-1", {}, store, "job-1")
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual([item["status"] for item in result["results"]], ["completed"] * 4)
+            self.assertTrue((output / "autonomy.json").exists())
+            self.assertIn("agent.completed", [item["kind"] for item in store.events("job-1")])
 
     def test_memory_requires_verification_before_prompt_context(self) -> None:
         from yteam_memory import LearningMemory

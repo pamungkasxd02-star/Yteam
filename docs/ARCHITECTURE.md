@@ -21,6 +21,8 @@ systems while keeping the implementation first-party and local-first.
    and WhatsApp all call the same command gate and share the same audit trail.
 7. **Security defaults fail closed** — read-only, authorized targets, low rate,
    no customer objects, no destructive operations, and no auto-submission.
+8. **Plans never become code** — autonomous actions resolve only to reviewed
+   registry entries; model text is never evaluated or passed to a shell.
 
 ## Component graph
 
@@ -81,6 +83,31 @@ pipeline run ID, updates a heartbeat, and stores a bounded result/error. On
 startup, stale running leases are returned to the queue. This makes the TUI a
 replaceable client: closing it does not cancel the hunt, and reopening it can
 render the same job/session state.
+
+## Autonomous execution contract
+
+The autonomy core uses four explicit objects: `Action`, `ToolSpec`,
+`ToolResult`, and `AgentRun`. The durable worker supplies a reviewed action
+graph and a fixed registry of Python handlers. Before each handler runs, the
+registry enforces the target policy, optional durable operator approval,
+timeout, and maximum serialized output size. Unknown tools and missing
+dependencies fail closed.
+
+The first-party `/auto` workflow is deliberately bounded:
+
+```text
+scope.validate
+      ↓
+recon.deep_hunt
+      ↓
+artifact.analyze
+      ↓
+triage.readiness
+```
+
+Every transition emits replayable `agent.*` and `tool.*` events. A report-ready
+observation remains a manual review decision; autonomous report submission is
+not part of the registry.
 
 ## Memory lifecycle
 

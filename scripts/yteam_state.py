@@ -65,6 +65,18 @@ CREATE TABLE IF NOT EXISTS jobs (
     updated_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_queue ON jobs(status, available_at, updated_at);
+CREATE TABLE IF NOT EXISTS approvals (
+    id TEXT PRIMARY KEY,
+    tool_name TEXT NOT NULL,
+    target TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    arguments TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending',
+    decided_by TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL,
+    decided_at REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status, created_at);
 """
 
 
@@ -269,3 +281,76 @@ class StateStore:
         with self._lock, self._connection() as connection:
             connection.execute(f"UPDATE jobs SET {', '.join(fields)} WHERE id=?", values)
         return self.job(job_id)
+
+    def create_approval(self, tool_name: str, target: str, reason: str, arguments: dict[str, object]) -> dict[str, object]:
+        """Create one redacted, durable approval request for a tool action."""
+        import secrets
+
+        approval_id = f"apr_{int(time.time())}_{secrets.token_hex(4)}"
+        safe_arguments = redact_value(arguments)
+        if not isinstance(safe_arguments, dict):
+            safe_arguments = {}
+        created_at = time.time()
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                "INSERT INTO approvals(id, tool_name, target, reason, arguments, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    approval_id,
+                    redact_text(tool_name),
+                    redact_text(target),
+                    redact_text(reason),
+                    json.dumps(safe_arguments, sort_keys=True),
+                    created_at,
+                ),
+            )
+        return self.approval(approval_id) or {"id": approval_id, "status": "pending"}
+
+    def approval(self, approval_id: str) -> dict[str, object] | None:
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT * FROM approvals WHERE id=?", (approval_id,)).fetchone()
+        return self._approval_row(row) if row else None
+
+    @staticmethod
+    def _approval_row(row: sqlite3.Row) -> dict[str, object]:
+        return {
+            "id": row["id"],
+            "tool_name": row["tool_name"],
+            "target": row["target"],
+            "reason": row["reason"],
+            "arguments": json.loads(row["arguments"]),
+            "status": row["status"],
+            "decided_by": row["decided_by"],
+            "created_at": row["created_at"],
+            "decided_at": row["decided_at"],
+        }
+
+    def list_approvals(self, status: str | None = None, limit: int = 20) -> list[dict[str, object]]:
+        bounded = max(1, min(int(limit), 100))
+        with self._lock, self._connection() as connection:
+            if status:
+                rows = connection.execute(
+                    "SELECT * FROM approvals WHERE status=? ORDER BY created_at DESC LIMIT ?",
+                    (status, bounded),
+                ).fetchall()
+            else:
+                rows = connection.execute("SELECT * FROM approvals ORDER BY created_at DESC LIMIT ?", (bounded,)).fetchall()
+        return [self._approval_row(row) for row in rows]
+
+    def resolve_approval(self, approval_id: str, status: str, decided_by: str = "local-operator") -> dict[str, object]:
+        if status not in {"approved", "denied"}:
+            raise ValueError("approval decision must be approved or denied")
+        now = time.time()
+        with self._lock, self._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE approvals SET status=?, decided_by=?, decided_at=? WHERE id=? AND status='pending'",
+                (status, redact_text(decided_by), now, approval_id),
+            )
+        if cursor.rowcount != 1:
+            current = self.approval(approval_id)
+            if current is None:
+                raise ValueError(f"approval not found: {approval_id}")
+            raise ValueError(f"approval is already {current['status']}: {approval_id}")
+        resolved = self.approval(approval_id)
+        if resolved is None:  # pragma: no cover - impossible after successful update
+            raise ValueError(f"approval disappeared: {approval_id}")
+        return resolved

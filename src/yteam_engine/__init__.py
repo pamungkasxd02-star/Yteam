@@ -33,10 +33,14 @@ from .context_guard import (
     estimate_message_tokens,
     estimate_tokens,
 )
+from .autonomy import Action, AgentRun, AutonomousAgent, ToolRegistry, ToolResult, ToolSpec
 
 __all__ = [
     "AdaptivePlanner",
+    "Action",
     "Admission",
+    "AgentRun",
+    "AutonomousAgent",
     "ContextGuard",
     "Engine",
     "GraphRun",
@@ -57,6 +61,9 @@ __all__ = [
     "TargetEntry",
     "TaskGraph",
     "TaskNode",
+    "ToolRegistry",
+    "ToolResult",
+    "ToolSpec",
     "build_default_policy",
     "default_policy_path",
     "engine_status",
@@ -91,6 +98,7 @@ class Engine:
         self.policy = policy or build_default_policy(self.runtime_dir / "policy.json")
         self.scheduler = Scheduler(self.policy, store=None, max_workers=max_workers)
         self.planner = AdaptivePlanner(self.policy)
+        self.tools = ToolRegistry(self.policy)
         self.knowledge = KnowledgeGraph(self.runtime_dir / "knowledge" / "graph.jsonl")
         self.skills = SkillResolver(
             policy=self.policy,
@@ -118,6 +126,7 @@ class Engine:
             "policy": self.policy.to_dict(),
             "scheduler": self.scheduler.summary(),
             "planner_weights": {k: round(v, 3) for k, v in self.planner.weights().items()},
+            "tools": {"registered": len(self.tools.names()), "names": self.tools.names()},
             "knowledge": self.knowledge.summary(),
             "skill_cache": self.skills.cache_stats(),
         }

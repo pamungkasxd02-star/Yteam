@@ -35,7 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 COMMANDS = (
     "/help", "/models", "/model", "/status", "/history", "/clear", "/memory",
     "/events", "/jobs", "/skills", "/engine", "/plan", "/ctx", "/learn",
-    "/verify", "/bb", "/doctor", "/quit",
+    "/verify", "/bb", "/auto", "/approvals", "/approve", "/deny", "/doctor", "/quit",
 )
 
 

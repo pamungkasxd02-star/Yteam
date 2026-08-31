@@ -289,6 +289,86 @@ class EngineSkillResolverTests(unittest.TestCase):
             resolver.resolve("evil-shell")
 
 
+class EngineAutonomyTests(unittest.TestCase):
+    def test_agent_executes_dependencies_and_stops_on_objective(self) -> None:
+        from yteam_engine import Action, AutonomousAgent, ToolRegistry, ToolSpec
+        from yteam_engine.policy import Policy
+
+        calls: list[str] = []
+        events: list[str] = []
+        registry = ToolRegistry(Policy.default())
+        registry.register(ToolSpec("scope.validate", "scope", "read", lambda payload: calls.append("scope") or {"allowed": True}))
+        registry.register(ToolSpec("artifact.analyze", "analyze", "read", lambda payload: calls.append("analyze") or {"objective_met": True, "signal": True}))
+        registry.register(ToolSpec("unused", "unused", "read", lambda payload: calls.append("unused") or {"ok": True}))
+        agent = AutonomousAgent(registry, event_handler=lambda kind, detail, payload: events.append(kind))
+        run = agent.run("https://example.com", [
+            Action("scope", "scope.validate"),
+            Action("analyze", "artifact.analyze", depends_on=("scope",)),
+            Action("unused", "unused", depends_on=("analyze",)),
+        ])
+        self.assertEqual(run.status, "completed")
+        self.assertEqual(calls, ["scope", "analyze"])
+        self.assertIn("objective met", run.stop_reason)
+        self.assertIn("agent.started", events)
+        self.assertIn("agent.completed", events)
+
+    def test_unknown_and_policy_denied_tools_fail_closed(self) -> None:
+        from yteam_engine import Action, ToolRegistry, ToolSpec
+        from yteam_engine.policy import Policy
+
+        registry = ToolRegistry(Policy.default())
+        registry.register(ToolSpec("writer", "write", "write", lambda payload: {"ok": True}))
+        unknown = registry.execute(Action("a", "missing"), "example.com")
+        denied = registry.execute(Action("b", "writer"), "example.com")
+        self.assertEqual(unknown.status, "blocked")
+        self.assertEqual(denied.status, "blocked")
+        self.assertIn("not registered", unknown.error)
+        self.assertIn("not allowed", denied.error)
+
+    def test_durable_approval_required_then_accepted(self) -> None:
+        from yteam_engine import Action, ToolRegistry, ToolSpec
+        from yteam_engine.policy import Policy
+        from yteam_state import StateStore
+
+        policy = Policy({
+            "schema_version": 1,
+            "default_side_effect": "write",
+            "per_target_rate": 1.0,
+            "targets": {},
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            store = StateStore(Path(directory) / "state.db")
+            registry = ToolRegistry(policy, approval_store=store)
+            registry.register(ToolSpec("reviewed.write", "reviewed local action", "write", lambda payload: {"ok": True}, requires_approval=True))
+            action = Action("write", "reviewed.write", {"value": "safe"})
+            waiting = registry.execute(action, "example.com")
+            self.assertEqual(waiting.status, "approval_required")
+            self.assertTrue(waiting.approval_id.startswith("apr_"))
+            store.resolve_approval(waiting.approval_id, "approved")
+            completed = registry.execute(action, "example.com", approval_id=waiting.approval_id)
+            self.assertEqual(completed.status, "completed")
+            self.assertTrue(completed.observation["ok"])
+
+    def test_tool_output_is_bounded(self) -> None:
+        from yteam_engine import Action, ToolRegistry, ToolSpec
+        from yteam_engine.policy import Policy
+
+        registry = ToolRegistry(Policy.default())
+        registry.register(ToolSpec("large", "large", "read", lambda payload: {"body": "x" * 10000}, max_output_bytes=512))
+        result = registry.execute(Action("large", "large"), "example.com")
+        self.assertEqual(result.status, "completed")
+        self.assertTrue(result.observation["truncated"])
+        self.assertIn("sha256", result.observation)
+
+    def test_invalid_action_graph_is_rejected(self) -> None:
+        from yteam_engine import Action, AutonomousAgent, ToolRegistry
+        from yteam_engine.policy import Policy
+
+        agent = AutonomousAgent(ToolRegistry(Policy.default()))
+        with self.assertRaises(ValueError):
+            agent.run("example.com", [Action("a", "x", depends_on=("missing",))])
+
+
 class EngineContextGuardTests(unittest.TestCase):
     def _messages(self, count: int) -> list[dict[str, str]]:
         return [
@@ -342,7 +422,8 @@ class EngineContextGuardTests(unittest.TestCase):
         from yteam_runtime import YteamRuntime
 
         with tempfile.TemporaryDirectory() as directory:
-            runtime = YteamRuntime(Path(directory))
+            with patch("yteam_runtime.discover_free_models", return_value=["model-test"]):
+                runtime = YteamRuntime(Path(directory))
             output = runtime.command("/ctx")
             self.assertIn("level", output)
 

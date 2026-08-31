@@ -138,17 +138,40 @@ def execute_job(store, job: dict[str, object], worker_id: str) -> dict[str, obje
     thread.start()
     store.update_job(job_id, phase="recon")
     try:
-        from yteam_hunt import run
-
         params = dict(job.get("params") or {})
-        result = run(
-            str(job["target"]), output, pipeline_id,
-            int(params.get("depth", 2)), float(params.get("rate", 1.0)),
-            bool(params.get("use_external", False)), bool(params.get("scan", False)),
-            Path(str(params["scope_file"])) if params.get("scope_file") else None,
-        )
-        summary = {"pipeline_run_id": pipeline_id, "output": str(output), "hunt_status": result.get("status"), "stages": len(result.get("stages", []))}
-        store.update_job(job_id, status="completed" if result.get("status") != "blocked" else "failed", phase="triage", result=summary, error="" if result.get("status") != "blocked" else "scope or recon blocked")
+        if str(job.get("kind")) == "autonomous_assessment":
+            from yteam_autonomy import run as run_autonomy
+
+            store.update_job(job_id, phase="autonomy")
+            result = run_autonomy(target, output, pipeline_id, params, store, job_id)
+            successful = result.get("status") == "completed"
+            summary = {
+                "pipeline_run_id": pipeline_id,
+                "output": str(output),
+                "autonomy_status": result.get("status"),
+                "rounds": result.get("rounds", 0),
+                "actions": len(result.get("results", [])),
+                "stop_reason": result.get("stop_reason", ""),
+            }
+            store.update_job(
+                job_id,
+                status="completed" if successful else "failed",
+                phase="triage" if successful else "blocked",
+                result=summary,
+                error="" if successful else str(result.get("stop_reason", "autonomous assessment blocked")),
+            )
+        else:
+            from yteam_hunt import run as run_hunt
+
+            result = run_hunt(
+                target, output, pipeline_id,
+                int(params.get("depth", 2)), float(params.get("rate", 1.0)),
+                bool(params.get("use_external", False)), bool(params.get("scan", False)),
+                Path(str(params["scope_file"])) if params.get("scope_file") else None,
+            )
+            successful = result.get("status") != "blocked"
+            summary = {"pipeline_run_id": pipeline_id, "output": str(output), "hunt_status": result.get("status"), "stages": len(result.get("stages", []))}
+            store.update_job(job_id, status="completed" if successful else "failed", phase="triage", result=summary, error="" if successful else "scope or recon blocked")
         _log_knowledge(target, result)
         return summary
     finally:

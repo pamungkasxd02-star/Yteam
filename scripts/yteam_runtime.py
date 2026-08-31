@@ -101,6 +101,7 @@ class YteamRuntime:
             "/engine": lambda _: self.engine_text(),
             "/plan": lambda _: self.plan_text(""),
             "/ctx": lambda _: self.ctx_text(),
+            "/approvals": lambda _: self.approvals_text(),
         }
 
     def _load_profile_prompt(self) -> str:
@@ -125,6 +126,10 @@ class YteamRuntime:
             "/skills                  show indexed skill/risk summary",
             "/engine                  show policy, scheduler, planner, knowledge, resolver state",
             "/plan <target>           build an adaptive recon/attack plan for an authorized target",
+            "/auto <target>           run the bounded autonomous assessment loop",
+            "/approvals               show durable operator approval requests",
+            "/approve <id>            approve one reviewed tool request",
+            "/deny <id>               deny one reviewed tool request",
             "/ctx                     show context-guard status (auto-compaction + handoff)",
             "/learn <lesson>          propose a redacted lesson for verification",
             "/verify <proposal-id>    promote one proposal into verified context",
@@ -194,6 +199,26 @@ class YteamRuntime:
         if not jobs:
             return "No durable assessment jobs."
         return "\n".join(f"{item['id']} [{item['status']}/{item['phase']}] {item['target']} attempt={item['attempt']}" for item in jobs)
+
+    def approvals_text(self) -> str:
+        items = self.state.list_approvals(limit=12)
+        if not items:
+            return "No durable approval requests."
+        return "\n".join(
+            f"{item['id']} [{item['status']}] {item['tool_name']} target={item['target']} reason={item['reason'][:100]}"
+            for item in items
+        )
+
+    def resolve_approval(self, value: str, decision: str) -> str:
+        approval_id = value.strip()
+        if not approval_id:
+            return f"Usage: /{'approve' if decision == 'approved' else 'deny'} <approval-id>"
+        try:
+            item = self.state.resolve_approval(approval_id, decision)
+        except ValueError as error:
+            return f"Approval decision failed: {error}"
+        self.events.emit("approval.resolved", approval_id, {"status": decision, "tool": item["tool_name"], "target": item["target"]})
+        return f"{approval_id} is now {decision}: {item['tool_name']} on {item['target']}"
 
     def skills_text(self) -> str:
         from yteam_skills import registry
@@ -278,6 +303,21 @@ class YteamRuntime:
         self.events.emit("bb.admitted", str(job["id"]), {"target": target, "job_id": job["id"]})
         return f"Queued durable read-only assessment {job['id']}: {target}\nThe worker will resume it after a terminal close."
 
+    def request_auto(self, value: str) -> str:
+        target = value.strip()
+        if not target or target.startswith("-") or any(char in target for char in "\r\n"):
+            return "Usage: /auto <authorized-http(s)-target>"
+        job = self.state.create_job(
+            target,
+            {"depth": 2, "rate": self.policy.max_requests_per_second, "use_external": False, "scan": False},
+            kind="autonomous_assessment",
+        )
+        self.events.emit("agent.admitted", str(job["id"]), {"target": target, "job_id": job["id"]})
+        return (
+            f"Queued autonomous assessment {job['id']}: {target}\n"
+            "The worker will scope-gate, recon, analyze, and triage it. Reports remain manual."
+        )
+
     def command(self, message: str) -> str | None:
         message = message.strip()
         if message in self.commands:
@@ -295,6 +335,12 @@ class YteamRuntime:
         if message.startswith("/doctor"):
             from yteam_doctor import run
             return json.dumps(run(), indent=2)
+        if message.startswith("/auto") and (message == "/auto" or message.startswith("/auto ")):
+            return self.request_auto(message[5:])
+        if message.startswith("/approve "):
+            return self.resolve_approval(message[9:], "approved")
+        if message.startswith("/deny "):
+            return self.resolve_approval(message[6:], "denied")
         if message == "/quit":
             self.quit_requested = True
             self.events.emit("runtime.quit", self.session.session_id)

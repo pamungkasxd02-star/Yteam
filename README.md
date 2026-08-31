@@ -164,6 +164,10 @@ Inside the TUI:
 | `/ctx` | Show context usage, compaction, and handoff state |
 | `/doctor` | Run local diagnostics |
 | `/bb <target>` | Queue a scoped read-only assessment |
+| `/auto <target>` | Queue the bounded scope → recon → analysis → triage agent loop |
+| `/approvals` | Show durable tool approval requests |
+| `/approve <id>` | Approve one reviewed tool action |
+| `/deny <id>` | Deny one reviewed tool action |
 | `/quit` | Exit |
 
 ## Durable assessment worker
@@ -179,6 +183,20 @@ python scripts/yteam_worker.py --once
 
 The worker does not submit reports, access customer objects, or enable
 destructive actions. The job output and pipeline records remain local.
+
+### Autonomous assessment loop
+
+`/auto` uses a reviewed action graph rather than executing model-generated
+shell text. Each action resolves through the native tool registry and is gated
+by the active target policy, a fixed timeout, bounded/redacted output, explicit
+dependencies, and durable events. Tools marked for approval pause and create a
+durable request that can be reviewed with `/approvals`; no report is ever
+submitted automatically.
+
+The built-in workflow performs exact scope validation, bounded deep recon,
+artifact analysis, and evidence-readiness triage. A failed prerequisite blocks
+its dependents, an unmet approval pauses the run, and hard round/action budgets
+prevent an unbounded loop.
 
 ## Context guard
 
@@ -260,6 +278,7 @@ network assessment remains in the durable worker.
 ```text
 scripts/yteam_tui.py       full-screen TUI and plain fallback
 scripts/yteam_runtime.py   commands, model/session lifecycle, events
+scripts/yteam_autonomy.py  reviewed autonomous assessment workflow
 scripts/yteam_state.py     SQLite WAL state and durable jobs
 scripts/yteam_memory.py    verified two-phase learning memory
 scripts/yteam_worker.py    lease-based assessment worker
@@ -267,7 +286,7 @@ scripts/yteam_recon.py     bounded web recon pipeline
 scripts/localsolver.py     browser-observation HTTP service
 scripts/yteam_mcp.py       read-only MCP server
 src/local_solver/          gate detector, browser adapter, queue, service
-src/yteam_engine/          policy, DAG, scheduler, planner, graph, context
+src/yteam_engine/          policy, autonomy, tools, DAG, scheduler, planner, graph, context
 skills/                    reviewed first-party playbooks and catalog
 ```
 
