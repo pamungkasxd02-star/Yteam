@@ -40,6 +40,14 @@ def run() -> dict[str, object]:
     checks.append(check("uv", bool(uv), uv or "not found; installer can bootstrap it", required=False))
     checks.append(check("config", (ROOT / "YTEAM_SECURITY.md").exists(), "YTEAM_SECURITY.md"))
     checks.append(check("github-ci", (ROOT / ".github" / "workflows" / "ci.yml").exists(), ".github/workflows/ci.yml"))
+    manifest_path = ROOT / "runtime" / "install-manifest.json"
+    browser_status = "not-installed"
+    if manifest_path.exists():
+        try:
+            browser_status = str(json.loads(manifest_path.read_text(encoding="utf-8")).get("browser_data_status", browser_status))
+        except (OSError, json.JSONDecodeError):
+            browser_status = "manifest-invalid"
+    checks.append(check("browser-data", browser_status == "installed", browser_status, required=False))
     model_config = next((path for path in (ROOT / "yteam.local.yaml", ROOT / "runtime" / "yteam-model.yaml", ROOT / "runtime" / "yteam-model.local.yaml") if path.exists()), None)
     checks.append(check("model-config", True, str(model_config.relative_to(ROOT)) if model_config else "automatic Zen Free default (keyless)", required=False))
     usage = shutil.disk_usage(ROOT.anchor or ROOT)

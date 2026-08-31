@@ -212,6 +212,15 @@ def run_command(command: list[str], cwd: Path | None = None, env: dict[str, str]
         raise RuntimeError(f"command failed with exit code {result.returncode}: {' '.join(command)}")
 
 
+def run_quiet(command: list[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
+    """Run optional setup steps without exposing a platform traceback."""
+    result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, check=False)
+    if result.returncode:
+        details = (result.stderr or result.stdout or "no diagnostic output").strip().splitlines()
+        detail = details[-1] if details else "unknown error"
+        raise RuntimeError(f"command failed with exit code {result.returncode}: {detail}")
+
+
 def python_in_venv() -> Path:
     return venv_python()
 
@@ -324,11 +333,11 @@ def install_dependencies(uv: str | None, fetch_browser: bool) -> tuple[str, str]
         env["PLAYWRIGHT_BROWSERS_PATH"] = str(ROOT / "runtime" / "cache" / "playwright")
         env["CAMOUFOX_CACHE_DIR"] = str(cache)
         try:
-            run_command([str(python_in_venv()), "-m", "camoufox", "fetch"], cwd=ROOT, env=env)
+            run_quiet([str(python_in_venv()), "-m", "camoufox", "fetch"], cwd=ROOT, env=env)
             browser_status = "installed"
         except RuntimeError as error:
             browser_status = "deferred"
-            print(f"Warning: browser data belum berhasil diunduh ({error}). Runtime inti tetap terpasang; jalankan 'yteam-doctor' atau install ulang dengan jaringan siap.", file=sys.stderr)
+            print(f"Warning: browser data ditunda ({error}). Core YTEAM tetap terpasang; jalankan 'yteam-doctor --fix' nanti.", file=sys.stderr)
     else:
         browser_status = "skipped"
     return backend, browser_status
