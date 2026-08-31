@@ -489,6 +489,10 @@ class StandaloneYteamTests(unittest.TestCase):
         self.assertTrue((ROOT / "install.py").exists())
         self.assertTrue((ROOT / "install.sh").exists())
         self.assertTrue((ROOT / "install.ps1").exists())
+        self.assertTrue((ROOT / "uninstall.ps1").exists())
+        self.assertTrue((ROOT / "uninstall.sh").exists())
+        self.assertTrue((SCRIPTS / "yteam_uninstall.py").exists())
+        self.assertIn("--repair", installer)
         import install_yteam
 
         launcher = install_yteam.launcher_text(ROOT)

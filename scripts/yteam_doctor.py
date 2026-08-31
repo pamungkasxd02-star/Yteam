@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -50,7 +51,13 @@ def run() -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--fix", action="store_true", help="Repair the isolated runtime and launchers automatically")
     args = parser.parse_args()
+    if args.fix:
+        installer = ROOT / "scripts" / "install_yteam.py"
+        command = [sys.executable, str(installer)]
+        print("Repairing YTEAM runtime and launchers...")
+        return subprocess.run(command, cwd=ROOT, check=False).returncode
     result = run()
     if args.json:
         print(json.dumps(result, indent=2))

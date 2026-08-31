@@ -149,6 +149,14 @@ def mcp_launcher_text(target: Path) -> str:
     return f'#!/usr/bin/env sh\nset -eu\nexec "{python}" "{script}" "$@"\n'
 
 
+def doctor_launcher_text(target: Path) -> str:
+    python = _quote_command_path(venv_python(target))
+    script = _quote_command_path(target / "scripts" / "yteam_doctor.py")
+    if os.name == "nt":
+        return f'@echo off\n"{python}" "{script}" %*\n'
+    return f'#!/usr/bin/env sh\nset -eu\nexec "{python}" "{script}" "$@"\n'
+
+
 def install(destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     name = "yteam.cmd" if os.name == "nt" else "yteam"
@@ -186,6 +194,14 @@ def install_mcp(destination: Path) -> Path:
     name = "yteam-mcp.cmd" if os.name == "nt" else "yteam-mcp"
     path = destination / name
     _atomic_write(path, mcp_launcher_text(ROOT), executable=True)
+    return path
+
+
+def install_doctor(destination: Path) -> Path:
+    destination.mkdir(parents=True, exist_ok=True)
+    name = "yteam-doctor.cmd" if os.name == "nt" else "yteam-doctor"
+    path = destination / name
+    _atomic_write(path, doctor_launcher_text(ROOT), executable=True)
     return path
 
 
@@ -352,12 +368,14 @@ def setup(args: argparse.Namespace) -> Path:
     worker_path = install_worker(destination)
     localsolver_path = install_localsolver(destination)
     mcp_path = install_mcp(destination)
+    doctor_path = install_doctor(destination)
     write_install_manifest(destination, backend, browser_requested, browser_status)
     print(f"Installed YTEAM launcher: {path}")
     print(f"Installed YTEAM control launcher: {control_path}")
     print(f"Installed YTEAM worker launcher: {worker_path}")
     print(f"Installed LocalSolver launcher: {localsolver_path}")
     print(f"Installed YTEAM MCP launcher: {mcp_path}")
+    print(f"Installed YTEAM doctor launcher: {doctor_path}")
     print("Global OpenCode was not modified.")
     print(f"Install manifest: {INSTALL_MANIFEST}")
     return path
@@ -367,6 +385,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bin-dir", type=Path, help="User-local bin directory")
     parser.add_argument("--skip-browser-download", "--no-browser", dest="skip_browser_download", action="store_true", help="Install Python packages without downloading Camoufox browser data")
+    parser.add_argument("--repair", action="store_true", help="Reinstall dependencies and refresh all launchers in-place")
     parser.add_argument("--dry-run", action="store_true", help="Show setup plan without downloading or modifying anything")
     args = parser.parse_args()
     try:

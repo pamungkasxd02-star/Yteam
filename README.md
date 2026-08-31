@@ -55,6 +55,15 @@ automatically selects an installed Python 3.11, 3.12, or 3.13—even when the
 OS default `python` is older. Use `--skip-browser-download` (or the shorter
 `--no-browser`) when browser observation is not needed.
 
+The same checkout also provides product-style maintenance commands:
+
+```text
+yteam-doctor                 health check
+yteam-doctor --fix           repair runtime and launchers
+python scripts/yteam_uninstall.py --yes   remove launchers, preserve reports
+python scripts/yteam_uninstall.py --yes --purge-runtime   remove caches and venv too
+```
+
 ### Windows PowerShell
 
 ```powershell
