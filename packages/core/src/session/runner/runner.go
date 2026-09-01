@@ -17,12 +17,13 @@ import (
 // one logical turn. Tool calls are settled locally, then their results become
 // tool messages for the next provider turn.
 type Runner struct {
-	Provider *provider.Client
-	Tools    *tool.Registry
-	Store    *session.Store
-	MaxSteps int
-	OnText   func(string)
-	OnTool   func(schema.ToolCall, string, error)
+	Provider    *provider.Client
+	Tools       *tool.Registry
+	Store       *session.Store
+	MaxSteps    int
+	OnText      func(string)
+	OnToolStart func(schema.ToolCall)
+	OnTool      func(schema.ToolCall, string, error)
 }
 
 func (r *Runner) Run(ctx context.Context, sess *session.Session, model, system string) error {
@@ -68,6 +69,9 @@ func (r *Runner) Run(ctx context.Context, sess *session.Session, model, system s
 		errs := make([]error, len(calls))
 		var group sync.WaitGroup
 		for index, call := range calls {
+			if r.OnToolStart != nil {
+				r.OnToolStart(call)
+			}
 			group.Add(1)
 			go func(index int, call schema.ToolCall) {
 				defer group.Done()

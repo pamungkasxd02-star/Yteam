@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/permission"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
 )
@@ -33,13 +34,23 @@ type UI struct {
 	transcript   []session.Message
 	picker       *Picker
 	pickerKind   string
+	editor       *Editor
+	reducer      *TranscriptReducer
+	redraw       chan struct{}
 }
 
 func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
-	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: app.CurrentSession().Messages}
+	reducer := NewTranscriptReducer()
+	current := app.CurrentSession()
+	reducer.Hydrate(current.Messages)
+	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1)}
 }
 
 func (ui *UI) Run(ctx context.Context) error {
+	ui.startEventWatcher(ctx)
+	if file, ok := ui.in.(*os.File); ok && IsTerminal(file) {
+		return ui.runRaw(ctx, file)
+	}
 	ui.draw()
 	scanner := bufio.NewScanner(ui.in)
 	for {
@@ -76,6 +87,202 @@ func (ui *UI) Run(ctx context.Context) error {
 		ui.transcript = ui.app.CurrentSession().Messages
 		ui.draw()
 	}
+}
+
+func (ui *UI) startEventWatcher(ctx context.Context) {
+	journal := ui.app.EventJournal()
+	if journal == nil {
+		return
+	}
+	updates := journal.Subscribe(ctx)
+	go func() {
+		for event := range updates {
+			if event.Aggregate != "" && event.Aggregate != ui.app.CurrentSession().ID {
+				continue
+			}
+			ui.mu.Lock()
+			ui.reducer.Apply(event)
+			ui.transcript = ui.app.CurrentSession().Messages
+			ui.mu.Unlock()
+			select {
+			case ui.redraw <- struct{}{}:
+			default:
+			}
+		}
+	}()
+}
+
+func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
+	restore, err := enableRaw(file)
+	if err != nil {
+		return err
+	}
+	defer restore()
+	ui.draw()
+	keys := NewKeyReader(file)
+	type keyResult struct {
+		key Key
+		err error
+	}
+	keyCh := make(chan keyResult)
+	go func() {
+		for {
+			key, err := keys.ReadKey()
+			keyCh <- keyResult{key: key, err: err}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	for {
+		var key Key
+		select {
+		case result := <-keyCh:
+			if result.err != nil {
+				return result.err
+			}
+			key = result.key
+		case <-ui.redraw:
+			ui.draw()
+			continue
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		if key.Kind == KeyCtrlC {
+			return nil
+		}
+		if ui.picker != nil {
+			if err := ui.handlePickerKey(ctx, key); err != nil {
+				fmt.Fprintln(ui.out, "error:", err)
+			}
+			ui.draw()
+			continue
+		}
+		switch key.Kind {
+		case KeyText:
+			if ui.handlePermissionKey(key) {
+				continue
+			}
+			ui.editor.Insert(key.Text)
+		case KeyCtrlJ:
+			ui.editor.Newline()
+		case KeyEnter:
+			text := strings.TrimSpace(ui.editor.String())
+			if text == "" {
+				ui.draw()
+				continue
+			}
+			ui.editor.AddHistory(ui.editor.String())
+			ui.editor.Reset()
+			if strings.HasPrefix(text, "/") {
+				handled, commandErr := ui.command(ctx, text)
+				if handled {
+					if commandErr != nil {
+						fmt.Fprintln(ui.out, "error:", commandErr)
+					}
+					ui.transcript = ui.app.CurrentSession().Messages
+					ui.draw()
+					continue
+				}
+			}
+			ui.route = RouteSession
+			if err := ui.app.Prompt(ctx, text, ui.out); err != nil {
+				fmt.Fprintln(ui.out, "error:", err)
+			}
+			ui.transcript = ui.app.CurrentSession().Messages
+		case KeyBackspace:
+			ui.editor.Backspace()
+		case KeyDelete:
+			ui.editor.Delete()
+		case KeyLeft:
+			ui.editor.Left()
+		case KeyRight:
+			ui.editor.Right()
+		case KeyHome:
+			ui.editor.Home()
+		case KeyEnd:
+			ui.editor.End()
+		case KeyUp:
+			if ui.editor.Cursor() == lineStart(ui.editor.value, ui.editor.cursor) && lineStart(ui.editor.value, ui.editor.cursor) == 0 {
+				ui.editor.HistoryUp()
+			} else {
+				ui.editor.Up()
+			}
+		case KeyDown:
+			lastLine := lineEnd(ui.editor.value, ui.editor.cursor) == len(ui.editor.value)
+			if lastLine {
+				ui.editor.HistoryDown()
+			} else {
+				ui.editor.Down()
+			}
+		case KeyCtrlP:
+			ui.editor.HistoryUp()
+		case KeyEscape:
+			ui.editor.Reset()
+		}
+		ui.draw()
+	}
+}
+
+func (ui *UI) handlePermissionKey(key Key) bool {
+	pending := ui.app.PendingPermissionsForSession(ui.app.CurrentSession().ID)
+	if len(pending) == 0 || key.Kind != KeyText {
+		return false
+	}
+	var reply permission.Reply
+	switch strings.ToLower(key.Text) {
+	case "y":
+		reply = permission.Once
+	case "a":
+		reply = permission.Always
+	case "n":
+		reply = permission.Reject
+	default:
+		return false
+	}
+	if err := ui.app.ReplyPermission(pending[0].ID, reply); err != nil {
+		fmt.Fprintln(ui.out, "permission error:", err)
+	}
+	return true
+}
+
+func (ui *UI) handlePickerKey(ctx context.Context, key Key) error {
+	if ui.picker == nil {
+		return nil
+	}
+	switch key.Kind {
+	case KeyUp:
+		ui.picker.Move(-1)
+	case KeyDown:
+		ui.picker.Move(1)
+	case KeyBackspace:
+		ui.picker.SetQuery(dropLastRune(ui.picker.Query))
+	case KeyText:
+		ui.picker.SetQuery(ui.picker.Query + key.Text)
+	case KeyEscape:
+		ui.picker = nil
+		ui.pickerKind = ""
+	case KeyEnter:
+		return ui.selectPicker(ctx)
+	}
+	return nil
+}
+
+func dropLastRune(value string) string {
+	runes := []rune(value)
+	if len(runes) == 0 {
+		return ""
+	}
+	return string(runes[:len(runes)-1])
+}
+
+func editorWithCaret(editor *Editor) string {
+	value := editor.String()
+	if editor.cursor >= len([]rune(value)) {
+		return value + "\x1b[7m \x1b[0m"
+	}
+	runes := []rune(value)
+	return string(runes[:editor.cursor]) + "\x1b[7m" + string(runes[editor.cursor]) + "\x1b[0m" + string(runes[editor.cursor+1:])
 }
 
 func (ui *UI) command(ctx context.Context, line string) (bool, error) {
@@ -253,9 +460,18 @@ func (ui *UI) draw() {
 		}
 		fmt.Fprintln(ui.out, "Ketik: up/down, /filter <teks>, enter/select, esc")
 	}
+	pending := ui.app.PendingPermissionsForSession(ui.app.CurrentSession().ID)
+	if len(pending) > 0 {
+		fmt.Fprintf(ui.out, "\nIzin diperlukan: %s pada %s\n", pending[0].Action, strings.Join(pending[0].Resources, ", "))
+		fmt.Fprintln(ui.out, "Tekan y=sekali, a=selalu, n=tolak")
+	}
 	fmt.Fprintln(ui.out, strings.Repeat("─", 72))
 	fmt.Fprintf(ui.out, "agent: %s  |  model: %s  |  /help /models /agents /sessions /new /exit\n", ui.app.AgentName(), ui.app.ModelName())
-	fmt.Fprint(ui.out, "> ")
+	if ui.editor != nil {
+		fmt.Fprintf(ui.out, "> %s", editorWithCaret(ui.editor))
+	} else {
+		fmt.Fprint(ui.out, "> ")
+	}
 }
 
 func IsTerminal(file *os.File) bool {

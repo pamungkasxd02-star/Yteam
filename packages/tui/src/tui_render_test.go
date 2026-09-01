@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/config"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/permission"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/provider"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
@@ -31,4 +32,33 @@ func TestHomeAndPickerRenderContainsUserFacingState(t *testing.T) {
 			t.Fatalf("missing %q in %s", expected, text)
 		}
 	}
+}
+
+func TestPermissionPromptIsRendered(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	store, err := session.Open(home, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := runtime.New(config.Config{Home: home, Model: "test"}, root, store, current, provider.New("http://127.0.0.1:1", ""))
+	request, err := app.Permissions.Assert(current.ID, "edit", "note.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.ID == "" {
+		t.Fatal("missing permission ID")
+	}
+	var output bytes.Buffer
+	ui := New(app, bytes.NewBuffer(nil), &output)
+	ui.draw()
+	for _, expected := range []string{"Izin diperlukan", "edit", "note.txt", "y=sekali", "a=selalu", "n=tolak"} {
+		if !bytes.Contains(output.Bytes(), []byte(expected)) {
+			t.Fatalf("missing %q in %s", expected, output.String())
+		}
+	}
+	_ = permission.Once
 }
