@@ -287,6 +287,9 @@ func (r *Runtime) InterruptSession(sessionID string) {
 	if cancel != nil {
 		cancel()
 	}
+	if r.Coordinator != nil {
+		_ = r.Coordinator.Interrupt(context.Background(), sessionID)
+	}
 }
 
 func (r *Runtime) CurrentSession() session.Session {
