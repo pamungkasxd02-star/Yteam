@@ -20,6 +20,26 @@ package names are reproduced in this repository under `packages/`.
 6. **Parity verification** — fixtures and compatibility tests derived from
    OpenCode's public wire contracts.
 
+## Current verified milestone
+
+The Go foundation currently has working implementations and tests for:
+
+- OpenAI-compatible streaming, including streamed tool-call aggregation;
+- per-session agent runner and single-run coordinator;
+- durable sessions with rename, fork, delete, compact, and export;
+- event journal with aggregate sequences and session replay;
+- permission allow/deny/ask plus once/always/reject waiting;
+- project-safe read/list/glob/grep/write/edit/bash tools;
+- HTTP health, status, sessions, messages, context, history, prompt, export,
+  event, model, agent, tools, and permission routes;
+- MCP stdio and LSP JSON-RPC client foundations;
+- Git read-only helpers and `SKILL.md` discovery;
+- an OpenCode-shaped Home/Session terminal UI foundation;
+- Windows, Linux, and macOS cross-builds.
+
+Full UI parity and every OpenCode integration are still future layers. A
+package directory or README is not counted as a completed implementation.
+
 ## Explicit non-goals
 
 - Copying OpenCode's TypeScript source into this repository.

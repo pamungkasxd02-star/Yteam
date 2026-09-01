@@ -11,5 +11,9 @@ compatibility.
 | `agent` | built-in build/plan catalog |
 | `protocol` | foundation contracts |
 | `schema` | foundation data types |
-| `tui` | foundation REPL; full TUI planned |
+| `tui` | Home/Session terminal foundation; full parity staged |
+| `server` | core HTTP API and SSE |
+| `opencode/src/mcp` | MCP stdio foundation |
+| `opencode/src/lsp` | LSP JSON-RPC foundation |
+| `skill` | `SKILL.md` discovery |
 | all other `packages/*` | boundary created; implementation staged |

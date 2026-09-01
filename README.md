@@ -66,6 +66,10 @@ YTEAM_HOME=/path/to/yteam-data
 The default Zen public marker is only sent in memory. Secrets are not committed
 or written to the repository.
 
+The verified portable build targets are Windows, Linux amd64, and macOS amd64.
+Use `go test -p 1 ./...` on constrained Windows/386 environments to avoid
+parallel compiler pagefile pressure.
+
 ## Porting rule
 
 OpenCode is the behavioral reference. Go code must preserve its observable
