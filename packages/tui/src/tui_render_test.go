@@ -1,0 +1,34 @@
+package tui
+
+import (
+	"bytes"
+	"testing"
+
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/config"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/provider"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
+)
+
+func TestHomeAndPickerRenderContainsUserFacingState(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	store, err := session.Open(home, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := runtime.New(config.Config{Home: home, Model: "test-model"}, root, store, current, provider.New("http://127.0.0.1:1", ""))
+	var output bytes.Buffer
+	ui := New(app, bytes.NewBuffer(nil), &output)
+	ui.picker = NewPicker("Pilih agent", []PickerItem{{ID: "build", Label: "build", Description: "Implement changes"}})
+	ui.draw()
+	text := output.String()
+	for _, expected := range []string{"YTEAM", "Home", "Pilih agent", "build", "test-model"} {
+		if !bytes.Contains([]byte(text), []byte(expected)) {
+			t.Fatalf("missing %q in %s", expected, text)
+		}
+	}
+}
