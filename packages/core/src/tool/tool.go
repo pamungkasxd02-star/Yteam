@@ -29,6 +29,39 @@ type Definition interface {
 	Parameters() map[string]any
 	Execute(context.Context, Context, json.RawMessage) (string, error)
 }
+
+// ExternalCaller lets MCP/plugin adapters participate in the same permission
+// and tool-call path as built-in tools.
+type ExternalCaller interface {
+	CallTool(context.Context, string, map[string]any) (string, error)
+}
+
+type ExternalTool struct {
+	Caller          ExternalCaller
+	ToolName        string
+	RemoteName      string
+	ToolDescription string
+	ToolParameters  map[string]any
+}
+
+func (t ExternalTool) Name() string               { return t.ToolName }
+func (t ExternalTool) Description() string        { return t.ToolDescription }
+func (t ExternalTool) Parameters() map[string]any { return t.ToolParameters }
+func (t ExternalTool) Execute(ctx context.Context, _ Context, raw json.RawMessage) (string, error) {
+	if t.Caller == nil {
+		return "", errors.New("external tool caller is nil")
+	}
+	var arguments map[string]any
+	if err := json.Unmarshal(raw, &arguments); err != nil {
+		return "", err
+	}
+	remoteName := t.RemoteName
+	if remoteName == "" {
+		remoteName = t.ToolName
+	}
+	return t.Caller.CallTool(ctx, remoteName, arguments)
+}
+
 type Registry struct {
 	items       map[string]Definition
 	permissions *permission.Engine

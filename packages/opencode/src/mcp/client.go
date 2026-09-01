@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"strings"
 	"sync"
 )
 
@@ -35,11 +37,9 @@ func Start(ctx context.Context, cfg Config) (*Client, error) {
 	}
 	cmd := exec.CommandContext(ctx, cfg.Command[0], cfg.Command[1:]...)
 	cmd.Dir = cfg.WorkingDir
-	if cfg.Environment != nil {
-		cmd.Env = []string{}
-		for key, value := range cfg.Environment {
-			cmd.Env = append(cmd.Env, key+"="+value)
-		}
+	cmd.Env = append([]string(nil), os.Environ()...)
+	for key, value := range cfg.Environment {
+		cmd.Env = append(cmd.Env, key+"="+value)
 	}
 	in, err := cmd.StdinPipe()
 	if err != nil {
@@ -112,6 +112,44 @@ func (c *Client) Tools(ctx context.Context) ([]Tool, error) {
 	}
 	err := c.Call(ctx, "tools/list", map[string]any{}, &result)
 	return result.Tools, err
+}
+
+func (c *Client) CallTool(ctx context.Context, name string, arguments map[string]any) (string, error) {
+	var result struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text,omitempty"`
+			Data string `json:"data,omitempty"`
+		} `json:"content"`
+		Structured map[string]any `json:"structuredContent,omitempty"`
+		IsError    bool           `json:"isError,omitempty"`
+	}
+	if err := c.Call(ctx, "tools/call", map[string]any{"name": name, "arguments": arguments}, &result); err != nil {
+		return "", err
+	}
+	var out strings.Builder
+	for _, item := range result.Content {
+		if item.Text != "" {
+			if out.Len() > 0 {
+				out.WriteByte('\n')
+			}
+			out.WriteString(item.Text)
+		}
+		if item.Data != "" {
+			if out.Len() > 0 {
+				out.WriteByte('\n')
+			}
+			out.WriteString(item.Data)
+		}
+	}
+	if out.Len() == 0 && result.Structured != nil {
+		data, _ := json.MarshalIndent(result.Structured, "", "  ")
+		out.Write(data)
+	}
+	if result.IsError {
+		return out.String(), errors.New(out.String())
+	}
+	return out.String(), nil
 }
 func (c *Client) Close() error {
 	if c.in != nil {

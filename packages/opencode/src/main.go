@@ -15,6 +15,7 @@ import (
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/provider"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
+	"github.com/pamungkasxd02-star/Yteam/packages/opencode/src/mcp"
 	"github.com/pamungkasxd02-star/Yteam/packages/server/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/tui/src"
 )
@@ -53,6 +54,9 @@ func main() {
 		fail(err)
 	}
 	app.AttachEvents(journal)
+	mcpManager := mcp.NewManager()
+	app.SetMCPStatus(func() any { return mcpManager.Status() })
+	_, _ = app.Skills()
 	if *serve > 0 {
 		srv := server.New(app, journal, *serverToken)
 		address := fmt.Sprintf("127.0.0.1:%d", *serve)

@@ -94,6 +94,46 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"current": s.Runtime.ModelName()})
+	case r.Method == http.MethodGet && r.URL.Path == "/api/git":
+		status, err := s.Runtime.GitStatus(r.Context())
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, status)
+	case r.Method == http.MethodGet && r.URL.Path == "/api/git/diff":
+		diff, err := s.Runtime.GitDiff(r.Context())
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte(diff))
+	case r.Method == http.MethodGet && r.URL.Path == "/api/git/log":
+		count := 10
+		if raw := r.URL.Query().Get("count"); raw != "" {
+			if parsed, parseErr := strconv.Atoi(raw); parseErr == nil {
+				count = parsed
+			}
+		}
+		log, err := s.Runtime.GitLog(r.Context(), count)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte(log))
+	case r.Method == http.MethodGet && r.URL.Path == "/api/skills":
+		skills, err := s.Runtime.Skills()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, skills)
+	case r.Method == http.MethodGet && r.URL.Path == "/api/mcp":
+		writeJSON(w, http.StatusOK, s.Runtime.MCP())
+	case r.Method == http.MethodGet && r.URL.Path == "/api/lsp":
+		writeJSON(w, http.StatusOK, s.Runtime.LSP())
 	case r.Method == http.MethodGet && r.URL.Path == "/api/permission/request":
 		writeJSON(w, http.StatusOK, s.Runtime.PendingPermissions())
 	case r.Method == http.MethodPost && r.URL.Path == "/api/session":
