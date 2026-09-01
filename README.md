@@ -54,6 +54,11 @@ Interactive commands include `/models`, `/model <id>`, `/agents`,
 `/agent <name>`, `/sessions`, `/new`, `/fork`, `/rename <title>`, and
 `/export [md|json]`.
 
+The interactive terminal uses raw ANSI/UTF-8 input when attached to a TTY:
+multiline text uses `Ctrl+J`, history uses `Up`/`Down`, pickers support
+`Up`/`Down`/`Enter`/`Esc`, and permission prompts accept `y` (once), `a`
+(always), or `n` (reject). Piped input keeps the line-oriented REPL behavior.
+
 Provider settings are read from the environment:
 
 ```text

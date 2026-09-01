@@ -35,6 +35,10 @@ The Go foundation currently has working implementations and tests for:
 - MCP stdio and LSP JSON-RPC client foundations;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
+- raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
+  live transcript projection, and interactive permission approval;
+- durable session input admission with `queue`/`steer`, promotion, and
+  interrupt cancellation;
 - Windows, Linux, and macOS cross-builds.
 
 Full UI parity and every OpenCode integration are still future layers. A

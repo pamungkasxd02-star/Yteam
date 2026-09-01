@@ -12,6 +12,7 @@ import (
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/event"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/permission"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
 	"github.com/pamungkasxd02-star/Yteam/packages/schema/src"
 )
 
@@ -188,6 +189,40 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, s.Runtime.PendingPermissionsForSession(current.ID))
 		return
 	}
+	if len(parts) == 2 && parts[1] == "input" && r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, s.Runtime.PendingInputs(current.ID))
+		return
+	}
+	if len(parts) == 2 && parts[1] == "input" && r.Method == http.MethodPost {
+		var input struct {
+			Content  string           `json:"content"`
+			Delivery session.Delivery `json:"delivery"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil || strings.TrimSpace(input.Content) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "content is required"})
+			return
+		}
+		if input.Delivery == "" {
+			input.Delivery = session.DeliveryQueue
+		}
+		item, err := s.Runtime.AdmitInput(current.ID, input.Content, input.Delivery)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusAccepted, item)
+		return
+	}
+	if len(parts) == 3 && parts[1] == "input" && parts[2] == "promote" && r.Method == http.MethodPost {
+		items := s.Runtime.PromoteInputs(current.ID)
+		writeJSON(w, http.StatusOK, items)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "interrupt" && r.Method == http.MethodPost {
+		s.Runtime.InterruptSession(current.ID)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "interrupted"})
+		return
+	}
 	if len(parts) == 3 && parts[1] == "permission" && r.Method == http.MethodPost {
 		var input struct {
 			Reply permission.Reply `json:"reply"`
@@ -260,14 +295,18 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) == 2 && parts[1] == "prompt" && r.Method == http.MethodPost {
 		var input struct {
-			Content string `json:"content"`
+			Content  string           `json:"content"`
+			Delivery session.Delivery `json:"delivery"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil || strings.TrimSpace(input.Content) == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "content is required"})
 			return
 		}
 		s.Runtime.SwitchSession(current)
-		if err := s.Runtime.Prompt(r.Context(), input.Content, w); err != nil {
+		if input.Delivery == "" {
+			input.Delivery = session.DeliveryQueue
+		}
+		if err := s.Runtime.PromptDelivery(r.Context(), input.Content, input.Delivery, w); err != nil {
 			writeError(w, err)
 		}
 		return

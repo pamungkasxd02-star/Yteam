@@ -82,6 +82,37 @@ func TestSessionListAndExport(t *testing.T) {
 	}
 }
 
+func TestInputAdmissionAndPromotionAreSeparate(t *testing.T) {
+	s := testServer(t, "")
+	id := s.Runtime.CurrentSession().ID
+	handler := s.Handler()
+	body := strings.NewReader(`{"content":"steer me","delivery":"steer"}`)
+	r := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/session/"+id+"/input", body)
+	handler.ServeHTTP(r, req)
+	if r.Code != http.StatusAccepted || !strings.Contains(r.Body.String(), "steer me") {
+		t.Fatalf("admit = %d %s", r.Code, r.Body.String())
+	}
+	r = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/session/"+id+"/input", nil)
+	handler.ServeHTTP(r, req)
+	if r.Code != http.StatusOK || !strings.Contains(r.Body.String(), "steer me") {
+		t.Fatalf("pending = %d %s", r.Code, r.Body.String())
+	}
+	r = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/session/"+id+"/input/promote", nil)
+	handler.ServeHTTP(r, req)
+	if r.Code != http.StatusOK || !strings.Contains(r.Body.String(), "steer me") {
+		t.Fatalf("promote = %d %s", r.Code, r.Body.String())
+	}
+	r = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/session/"+id+"/input", nil)
+	handler.ServeHTTP(r, req)
+	if r.Code != http.StatusOK || strings.Contains(r.Body.String(), "steer me") {
+		t.Fatalf("pending after promote = %d %s", r.Code, r.Body.String())
+	}
+}
+
 func TestSessionMessagesContextAndEventReplay(t *testing.T) {
 	s := testServer(t, "")
 	id := s.Runtime.CurrentSession().ID
