@@ -36,6 +36,40 @@ type ExternalCaller interface {
 	CallTool(context.Context, string, map[string]any) (string, error)
 }
 
+type Questioner interface {
+	AskQuestion(string, []schema.QuestionInfo, *schema.QuestionToolRef) (schema.QuestionRequest, error)
+	AwaitQuestion(context.Context, string) ([]schema.QuestionAnswer, error)
+}
+
+type Question struct{ Manager Questioner }
+
+func (Question) Name() string        { return "question" }
+func (Question) Description() string { return "Ask the user a question and wait for an answer" }
+func (Question) Parameters() map[string]any {
+	return map[string]any{"type": "object", "properties": map[string]any{"questions": map[string]any{"type": "array"}}, "required": []string{"questions"}, "additionalProperties": false}
+}
+func (q Question) Execute(ctx context.Context, tc Context, raw json.RawMessage) (string, error) {
+	if q.Manager == nil {
+		return "", errors.New("question manager is not configured")
+	}
+	var input struct {
+		Questions []schema.QuestionInfo `json:"questions"`
+	}
+	if err := json.Unmarshal(raw, &input); err != nil || len(input.Questions) == 0 {
+		return "", errors.New("question requires questions")
+	}
+	request, err := q.Manager.AskQuestion(tc.SessionID, input.Questions, &schema.QuestionToolRef{MessageID: tc.CallID, CallID: tc.CallID})
+	if err != nil {
+		return "", err
+	}
+	answers, err := q.Manager.AwaitQuestion(ctx, request.ID)
+	if err != nil {
+		return "", err
+	}
+	data, _ := json.Marshal(answers)
+	return string(data), nil
+}
+
 type ExternalTool struct {
 	Caller          ExternalCaller
 	ToolName        string

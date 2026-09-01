@@ -13,12 +13,15 @@ type Event struct {
 }
 
 const (
-	EventSessionCreated  = "session.created"
-	EventPromptAdmitted  = "session.prompt.admitted"
-	EventPrompted        = "session.prompted"
-	EventTextDelta       = "message.text.delta"
-	EventToolStarted     = "tool.started"
-	EventToolFinished    = "tool.finished"
-	EventPermissionAsked = "permission.asked"
-	EventPermissionReply = "permission.replied"
+	EventSessionCreated   = "session.created"
+	EventPromptAdmitted   = "session.prompt.admitted"
+	EventPrompted         = "session.prompted"
+	EventTextDelta        = "message.text.delta"
+	EventToolStarted      = "tool.started"
+	EventToolFinished     = "tool.finished"
+	EventPermissionAsked  = "permission.asked"
+	EventPermissionReply  = "permission.replied"
+	EventQuestionAsked    = "question.asked"
+	EventQuestionReplied  = "question.replied"
+	EventQuestionRejected = "question.rejected"
 )

@@ -12,6 +12,7 @@ import (
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/permission"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
+	"github.com/pamungkasxd02-star/Yteam/packages/schema/src"
 )
 
 type Route string
@@ -158,6 +159,10 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.draw()
 			continue
 		}
+		if ui.handleQuestionKey(ctx, key) {
+			ui.draw()
+			continue
+		}
 		switch key.Kind {
 		case KeyText:
 			if ui.handlePermissionKey(key) {
@@ -222,6 +227,33 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 		}
 		ui.draw()
 	}
+}
+
+func (ui *UI) handleQuestionKey(ctx context.Context, key Key) bool {
+	items := ui.app.PendingQuestions(ui.app.CurrentSession().ID)
+	if len(items) == 0 || len(items[0].Questions) == 0 {
+		return false
+	}
+	request := items[0]
+	question := request.Questions[0]
+	if key.Kind == KeyEscape {
+		if err := ui.app.RejectQuestion(ctx, request.SessionID, request.ID); err != nil {
+			fmt.Fprintln(ui.out, "question error:", err)
+		}
+		return true
+	}
+	if key.Kind != KeyText {
+		return false
+	}
+	choice := atoi(key.Text)
+	if choice < 1 || choice > len(question.Options) {
+		return false
+	}
+	answer := schema.QuestionAnswer{question.Options[choice-1].Label}
+	if err := ui.app.ReplyQuestion(ctx, request.SessionID, request.ID, []schema.QuestionAnswer{answer}); err != nil {
+		fmt.Fprintln(ui.out, "question error:", err)
+	}
+	return true
 }
 
 func (ui *UI) handlePermissionKey(key Key) bool {
@@ -464,6 +496,15 @@ func (ui *UI) draw() {
 	if len(pending) > 0 {
 		fmt.Fprintf(ui.out, "\nIzin diperlukan: %s pada %s\n", pending[0].Action, strings.Join(pending[0].Resources, ", "))
 		fmt.Fprintln(ui.out, "Tekan y=sekali, a=selalu, n=tolak")
+	}
+	questions := ui.app.PendingQuestions(ui.app.CurrentSession().ID)
+	if len(questions) > 0 && len(questions[0].Questions) > 0 {
+		item := questions[0].Questions[0]
+		fmt.Fprintf(ui.out, "\nPertanyaan: %s\n", item.Question)
+		for index, option := range item.Options {
+			fmt.Fprintf(ui.out, "  %d. %s — %s\n", index+1, option.Label, option.Description)
+		}
+		fmt.Fprintln(ui.out, "Ketik nomor jawaban atau esc untuk menolak")
 	}
 	fmt.Fprintln(ui.out, strings.Repeat("─", 72))
 	fmt.Fprintf(ui.out, "agent: %s  |  model: %s  |  /help /models /agents /sessions /new /exit\n", ui.app.AgentName(), ui.app.ModelName())

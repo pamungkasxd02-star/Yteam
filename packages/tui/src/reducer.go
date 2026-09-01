@@ -65,6 +65,10 @@ func (r *TranscriptReducer) Apply(event schema.Event) {
 		r.Status = "waiting for permission"
 	case schema.EventPermissionReply:
 		r.Status = "running"
+	case schema.EventQuestionAsked:
+		r.Status = "waiting for answer"
+	case schema.EventQuestionReplied, schema.EventQuestionRejected:
+		r.Status = "running"
 	}
 }
 

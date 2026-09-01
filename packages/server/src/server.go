@@ -138,6 +138,8 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, s.Runtime.LSP())
 	case r.Method == http.MethodGet && r.URL.Path == "/api/permission/request":
 		writeJSON(w, http.StatusOK, s.Runtime.PendingPermissions())
+	case r.Method == http.MethodGet && r.URL.Path == "/api/question":
+		writeJSON(w, http.StatusOK, s.Runtime.PendingQuestions(""))
 	case r.Method == http.MethodPost && r.URL.Path == "/api/session":
 		next, err := s.Runtime.Store.New()
 		if err != nil {
@@ -192,6 +194,31 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) == 2 && parts[1] == "permission" && r.Method == http.MethodGet {
 		writeJSON(w, http.StatusOK, s.Runtime.PendingPermissionsForSession(current.ID))
+		return
+	}
+	if len(parts) == 2 && parts[1] == "question" && r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, s.Runtime.PendingQuestions(current.ID))
+		return
+	}
+	if len(parts) == 4 && parts[1] == "question" && parts[3] == "reply" && r.Method == http.MethodPost {
+		var input schema.QuestionReply
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		if err := s.Runtime.ReplyQuestion(r.Context(), current.ID, parts[2], input.Answers); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
+	}
+	if len(parts) == 4 && parts[1] == "question" && parts[3] == "reject" && r.Method == http.MethodPost {
+		if err := s.Runtime.RejectQuestion(r.Context(), current.ID, parts[2]); err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return
 	}
 	if len(parts) == 2 && parts[1] == "input" && r.Method == http.MethodGet {

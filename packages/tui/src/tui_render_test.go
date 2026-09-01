@@ -9,6 +9,7 @@ import (
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/provider"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
+	"github.com/pamungkasxd02-star/Yteam/packages/schema/src"
 )
 
 func TestHomeAndPickerRenderContainsUserFacingState(t *testing.T) {
@@ -61,4 +62,32 @@ func TestPermissionPromptIsRendered(t *testing.T) {
 		}
 	}
 	_ = permission.Once
+}
+
+func TestQuestionPromptIsRendered(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	store, err := session.Open(home, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := runtime.New(config.Config{Home: home, Model: "test"}, root, store, current, provider.New("http://127.0.0.1:1", ""))
+	request, err := app.AskQuestion(current.ID, []schema.QuestionInfo{{Question: "Use Go?", Header: "Choice", Options: []schema.QuestionOption{{Label: "Yes", Description: "Continue"}}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.ID == "" {
+		t.Fatal("missing question ID")
+	}
+	var output bytes.Buffer
+	ui := New(app, bytes.NewBuffer(nil), &output)
+	ui.draw()
+	for _, expected := range []string{"Pertanyaan: Use Go?", "1. Yes", "Ketik nomor jawaban"} {
+		if !bytes.Contains(output.Bytes(), []byte(expected)) {
+			t.Fatalf("missing %q in %s", expected, output.String())
+		}
+	}
 }

@@ -12,6 +12,7 @@ import (
 	gitstatus "github.com/pamungkasxd02-star/Yteam/packages/core/src/git"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/permission"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/provider"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/question"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session/runner"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/tool"
@@ -36,6 +37,7 @@ type Runtime struct {
 	SkillContext string
 	LSPStatus    func() any
 	Inputs       *session.InputQueue
+	Questions    *question.Manager
 	runMu        sync.Mutex
 	cancelRuns   map[string]context.CancelFunc
 }
@@ -45,20 +47,33 @@ func New(cfg config.Config, root string, store *session.Store, current *session.
 		{Action: "read", Resource: "*", Effect: permission.Allow},
 		{Action: "list", Resource: "*", Effect: permission.Allow},
 	})
+	questions := question.NewManager()
+	tools := tool.Builtins(permissions)
+	tools.Add(tool.Question{Manager: questionsAdapter{manager: questions}})
 	return &Runtime{
 		Config:      cfg,
 		Root:        root,
 		Store:       store,
 		Session:     current,
 		Provider:    client,
-		Runner:      &runner.Runner{Provider: client, Store: store, Tools: tool.Builtins(permissions)},
+		Runner:      &runner.Runner{Provider: client, Store: store, Tools: tools},
 		Coordinator: runner.NewCoordinator(),
 		Permissions: permissions,
 		Agent:       "build",
 		Model:       cfg.Model,
 		Inputs:      store.Inputs(),
 		cancelRuns:  map[string]context.CancelFunc{},
+		Questions:   questions,
 	}
+}
+
+type questionsAdapter struct{ manager *question.Manager }
+
+func (a questionsAdapter) AskQuestion(sessionID string, items []schema.QuestionInfo, toolRef *schema.QuestionToolRef) (schema.QuestionRequest, error) {
+	return a.manager.Ask(sessionID, items, toolRef)
+}
+func (a questionsAdapter) AwaitQuestion(ctx context.Context, id string) ([]schema.QuestionAnswer, error) {
+	return a.manager.Await(ctx, id)
 }
 
 func (r *Runtime) AttachEvents(journal *event.Journal) {
@@ -244,6 +259,46 @@ func (r *Runtime) ReplyPermissionForSession(sessionID, id string, reply permissi
 		return fmt.Errorf("permission request not found for session")
 	}
 	return r.ReplyPermission(id, reply)
+}
+
+func (r *Runtime) PendingQuestions(sessionID string) []schema.QuestionRequest {
+	if r.Questions == nil {
+		return nil
+	}
+	return r.Questions.Pending(sessionID)
+}
+
+func (r *Runtime) AskQuestion(sessionID string, items []schema.QuestionInfo, toolRef *schema.QuestionToolRef) (schema.QuestionRequest, error) {
+	if r.Questions == nil {
+		r.Questions = question.NewManager()
+	}
+	request, err := r.Questions.Ask(sessionID, items, toolRef)
+	if err == nil && r.Events != nil {
+		_, _ = r.Events.Publish(context.Background(), schema.EventQuestionAsked, sessionID, map[string]any{"request_id": request.ID})
+	}
+	return request, err
+}
+
+func (r *Runtime) ReplyQuestion(ctx context.Context, sessionID, id string, answers []schema.QuestionAnswer) error {
+	if r.Questions == nil {
+		return question.ErrNotFound
+	}
+	err := r.Questions.Reply(ctx, sessionID, id, answers)
+	if err == nil && r.Events != nil {
+		_, _ = r.Events.Publish(ctx, schema.EventQuestionReplied, sessionID, map[string]any{"request_id": id})
+	}
+	return err
+}
+
+func (r *Runtime) RejectQuestion(ctx context.Context, sessionID, id string) error {
+	if r.Questions == nil {
+		return question.ErrNotFound
+	}
+	err := r.Questions.Reject(ctx, sessionID, id)
+	if err == nil && r.Events != nil {
+		_, _ = r.Events.Publish(ctx, schema.EventQuestionRejected, sessionID, map[string]any{"request_id": id})
+	}
+	return err
 }
 
 func (r *Runtime) PendingInputs(sessionID string) []session.Input {
