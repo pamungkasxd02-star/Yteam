@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -162,7 +163,11 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	current, err := s.Runtime.Store.Load(parts[0])
 	if err != nil {
-		writeError(w, err)
+		if os.IsNotExist(err) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		} else {
+			writeError(w, err)
+		}
 		return
 	}
 	if len(parts) == 1 && r.Method == http.MethodGet {
@@ -231,8 +236,12 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 			return
 		}
-		if err := s.Runtime.ReplyPermission(parts[2], input.Reply); err != nil {
-			writeError(w, err)
+		if err := s.Runtime.ReplyPermissionForSession(current.ID, parts[2], input.Reply); err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+			} else {
+				writeError(w, err)
+			}
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -290,7 +299,7 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 			writeError(w, err)
 			return
 		}
-		writeJSON(w, http.StatusNoContent, nil)
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if len(parts) == 2 && parts[1] == "prompt" && r.Method == http.MethodPost {

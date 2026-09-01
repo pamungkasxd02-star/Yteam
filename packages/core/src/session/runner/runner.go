@@ -17,16 +17,23 @@ import (
 // one logical turn. Tool calls are settled locally, then their results become
 // tool messages for the next provider turn.
 type Runner struct {
-	Provider    *provider.Client
-	Tools       *tool.Registry
-	Store       *session.Store
-	MaxSteps    int
+	Provider *provider.Client
+	Tools    *tool.Registry
+	Store    *session.Store
+	MaxSteps int
+}
+
+func (r *Runner) Run(ctx context.Context, sess *session.Session, model, system string) error {
+	return r.RunWithOptions(ctx, sess, model, system, RunOptions{})
+}
+
+type RunOptions struct {
 	OnText      func(string)
 	OnToolStart func(schema.ToolCall)
 	OnTool      func(schema.ToolCall, string, error)
 }
 
-func (r *Runner) Run(ctx context.Context, sess *session.Session, model, system string) error {
+func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, model, system string, options RunOptions) error {
 	max := r.MaxSteps
 	if max <= 0 {
 		max = 8
@@ -44,8 +51,8 @@ func (r *Runner) Run(ctx context.Context, sess *session.Session, model, system s
 		err := r.Provider.Complete(ctx, protocol.ChatRequest{Model: model, Messages: messages, Tools: r.toolDefinitions()}, func(delta protocol.StreamDelta) error {
 			if delta.Content != "" {
 				text.WriteString(delta.Content)
-				if r.OnText != nil {
-					r.OnText(delta.Content)
+				if options.OnText != nil {
+					options.OnText(delta.Content)
 				}
 			}
 			if len(delta.ToolCalls) > 0 {
@@ -69,8 +76,8 @@ func (r *Runner) Run(ctx context.Context, sess *session.Session, model, system s
 		errs := make([]error, len(calls))
 		var group sync.WaitGroup
 		for index, call := range calls {
-			if r.OnToolStart != nil {
-				r.OnToolStart(call)
+			if options.OnToolStart != nil {
+				options.OnToolStart(call)
 			}
 			group.Add(1)
 			go func(index int, call schema.ToolCall) {
@@ -84,8 +91,8 @@ func (r *Runner) Run(ctx context.Context, sess *session.Session, model, system s
 		}
 		group.Wait()
 		for index, call := range calls {
-			if r.OnTool != nil {
-				r.OnTool(call, results[index], errs[index])
+			if options.OnTool != nil {
+				options.OnTool(call, results[index], errs[index])
 			}
 			content := results[index]
 			if errs[index] != nil {

@@ -238,6 +238,14 @@ func (r *Runtime) ReplyPermission(id string, reply permission.Reply) error {
 	return r.Permissions.Reply(id, reply)
 }
 
+func (r *Runtime) ReplyPermissionForSession(sessionID, id string, reply permission.Reply) error {
+	request, ok := r.Permissions.Get(id)
+	if !ok || request.SessionID != sessionID {
+		return fmt.Errorf("permission request not found for session")
+	}
+	return r.ReplyPermission(id, reply)
+}
+
 func (r *Runtime) PendingInputs(sessionID string) []session.Input {
 	if r.Inputs == nil {
 		return nil
@@ -249,7 +257,16 @@ func (r *Runtime) AdmitInput(sessionID, content string, delivery session.Deliver
 	if r.Inputs == nil {
 		r.Inputs = session.NewInputQueue()
 	}
-	return r.Inputs.Admit(sessionID, content, delivery)
+	item, err := r.Inputs.Admit(sessionID, content, delivery)
+	if err != nil {
+		return session.Input{}, err
+	}
+	if r.Events != nil {
+		_, _ = r.Events.Publish(context.Background(), schema.EventPromptAdmitted, sessionID, map[string]any{
+			"input_id": item.ID, "content": content, "delivery": string(delivery),
+		})
+	}
+	return item, nil
 }
 
 func (r *Runtime) PromoteInputs(sessionID string) []session.Input {
@@ -451,7 +468,7 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 	if r.Inputs == nil {
 		r.Inputs = session.NewInputQueue()
 	}
-	input, err := r.Inputs.Admit(current.ID, text, delivery)
+	input, err := r.AdmitInput(current.ID, text, delivery)
 	if err != nil {
 		return err
 	}
@@ -461,21 +478,16 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 		return err
 	}
 	current.Messages = append(current.Messages, user)
-	if r.Events != nil {
-		_, _ = r.Events.Publish(ctx, schema.EventPromptAdmitted, current.ID, map[string]any{"content": text, "delivery": string(delivery), "input_id": input.ID})
-	}
-	r.Runner.OnText = func(value string) {
+	options := runner.RunOptions{OnText: func(value string) {
 		_, _ = io.WriteString(out, value)
 		if r.Events != nil {
 			_, _ = r.Events.Publish(ctx, schema.EventTextDelta, current.ID, map[string]any{"content": value})
 		}
-	}
-	r.Runner.OnToolStart = func(call schema.ToolCall) {
+	}, OnToolStart: func(call schema.ToolCall) {
 		if r.Events != nil {
 			_, _ = r.Events.Publish(ctx, schema.EventToolStarted, current.ID, map[string]any{"name": call.Name, "call_id": call.ID})
 		}
-	}
-	r.Runner.OnTool = func(call schema.ToolCall, result string, err error) {
+	}, OnTool: func(call schema.ToolCall, result string, err error) {
 		if r.Events != nil {
 			_, _ = r.Events.Publish(ctx, schema.EventToolFinished, current.ID, map[string]any{"name": call.Name, "error": errorText(err)})
 		}
@@ -485,7 +497,7 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 		}
 		_, _ = fmt.Fprintf(out, "\n[tool %s selesai]\n", call.Name)
 		_ = result
-	}
+	}}
 	if r.Coordinator == nil {
 		r.Coordinator = runner.NewCoordinator()
 	}
@@ -493,9 +505,15 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 	r.runMu.Lock()
 	r.cancelRuns[current.ID] = cancel
 	r.runMu.Unlock()
-	defer func() { cancel(); r.runMu.Lock(); delete(r.cancelRuns, current.ID); r.runMu.Unlock() }()
+	defer func() {
+		cancel()
+		r.Inputs.ClearInterrupt(current.ID)
+		r.runMu.Lock()
+		delete(r.cancelRuns, current.ID)
+		r.runMu.Unlock()
+	}()
 	if err := r.Coordinator.Run(runCtx, current.ID, func(runCtx context.Context) error {
-		return r.Runner.Run(runCtx, current, r.ModelName(), r.SystemPrompt())
+		return r.Runner.RunWithOptions(runCtx, current, r.ModelName(), r.SystemPrompt(), options)
 	}); err != nil {
 		return err
 	}

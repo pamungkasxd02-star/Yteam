@@ -113,6 +113,22 @@ func TestInputAdmissionAndPromotionAreSeparate(t *testing.T) {
 	}
 }
 
+func TestMissingSessionIsNotFoundAndDeleteHasEmptyBody(t *testing.T) {
+	s := testServer(t, "")
+	handler := s.Handler()
+	r := httptest.NewRecorder()
+	handler.ServeHTTP(r, httptest.NewRequest(http.MethodGet, "/api/session/ses_missing", nil))
+	if r.Code != http.StatusNotFound {
+		t.Fatalf("missing session = %d", r.Code)
+	}
+	id := s.Runtime.CurrentSession().ID
+	r = httptest.NewRecorder()
+	handler.ServeHTTP(r, httptest.NewRequest(http.MethodDelete, "/api/session/"+id, nil))
+	if r.Code != http.StatusNoContent || r.Body.Len() != 0 {
+		t.Fatalf("delete = %d body=%q", r.Code, r.Body.String())
+	}
+}
+
 func TestSessionMessagesContextAndEventReplay(t *testing.T) {
 	s := testServer(t, "")
 	id := s.Runtime.CurrentSession().ID

@@ -15,6 +15,7 @@ type Event struct {
 const (
 	EventSessionCreated  = "session.created"
 	EventPromptAdmitted  = "session.prompt.admitted"
+	EventPrompted        = "session.prompted"
 	EventTextDelta       = "message.text.delta"
 	EventToolStarted     = "tool.started"
 	EventToolFinished    = "tool.finished"
