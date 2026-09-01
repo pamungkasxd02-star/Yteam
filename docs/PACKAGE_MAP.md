@@ -8,6 +8,7 @@ compatibility.
 | --- | --- |
 | `opencode` | foundation executable |
 | `core` | foundation runtime |
+| `agent` | built-in build/plan catalog |
 | `protocol` | foundation contracts |
 | `schema` | foundation data types |
 | `tui` | foundation REPL; full TUI planned |

@@ -6,9 +6,9 @@ written in Go instead of Bun/TypeScript.
 
 This repository is being ported in layers. The first layer is deliberately
 small and runnable: project discovery, configuration, durable sessions,
-OpenAI-compatible streaming, Indonesian CLI text, and an interactive REPL.
-Later layers will add the agent loop, tools and permissions, TUI, MCP, LSP,
-server mode, integrations, and plugin compatibility.
+OpenAI-compatible streaming, agent/tool execution, Indonesian CLI text, and an
+interactive Home/Session terminal UI. Later layers will add full TUI parity,
+MCP/LSP integrations, server breadth, and plugin compatibility.
 
 ## Layout
 
@@ -49,6 +49,10 @@ yteam /help
 yteam /status
 yteam
 ```
+
+Interactive commands include `/models`, `/model <id>`, `/agents`,
+`/agent <name>`, `/sessions`, `/new`, `/fork`, `/rename <title>`, and
+`/export [md|json]`.
 
 Provider settings are read from the environment:
 

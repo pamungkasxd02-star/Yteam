@@ -12,12 +12,17 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pamungkasxd02-star/Yteam/packages/schema/src"
 )
 
 type Message struct {
-	Role      string `json:"role"`
-	Content   string `json:"content"`
-	CreatedAt string `json:"created_at"`
+	Role       string            `json:"role"`
+	Content    string            `json:"content"`
+	Name       string            `json:"name,omitempty"`
+	ToolCallID string            `json:"tool_call_id,omitempty"`
+	ToolCalls  []schema.ToolCall `json:"tool_calls,omitempty"`
+	CreatedAt  string            `json:"created_at"`
 }
 type Session struct {
 	ID        string    `json:"id"`
@@ -46,7 +51,7 @@ func (s *Store) New() (*Session, error) {
 		return nil, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	sess := &Session{ID: hex.EncodeToString(buf), Title: "Sesi baru", Directory: s.directory, CreatedAt: now, UpdatedAt: now}
+	sess := &Session{ID: "ses_" + hex.EncodeToString(buf), Title: "Sesi baru", Directory: s.directory, CreatedAt: now, UpdatedAt: now}
 	return sess, s.writeMeta(sess)
 }
 
@@ -121,7 +126,7 @@ func (s *Store) Append(id string, message Message) error {
 	if err := file.Close(); err != nil {
 		return err
 	}
-	sess, err := s.Load(id)
+	sess, err := s.loadLocked(id)
 	if err != nil {
 		return err
 	}

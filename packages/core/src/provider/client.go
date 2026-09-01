@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/pamungkasxd02-star/Yteam/packages/protocol/src"
+	"github.com/pamungkasxd02-star/Yteam/packages/schema/src"
 )
 
 type Client struct {
@@ -68,7 +70,15 @@ func (c *Client) Complete(ctx context.Context, input protocol.ChatRequest, emit 
 		var payload struct {
 			Choices []struct {
 				Message struct {
-					Content string `json:"content"`
+					Content   string `json:"content"`
+					ToolCalls []struct {
+						ID       string `json:"id"`
+						Type     string `json:"type"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
 				} `json:"message"`
 			} `json:"choices"`
 		}
@@ -76,12 +86,17 @@ func (c *Client) Complete(ctx context.Context, input protocol.ChatRequest, emit 
 			return err
 		}
 		if len(payload.Choices) > 0 {
-			return emit(protocol.StreamDelta{Content: payload.Choices[0].Message.Content})
+			calls := make([]schema.ToolCall, 0, len(payload.Choices[0].Message.ToolCalls))
+			for _, call := range payload.Choices[0].Message.ToolCalls {
+				calls = append(calls, schema.ToolCall{ID: call.ID, Type: call.Type, Name: call.Function.Name, Arguments: call.Function.Arguments})
+			}
+			return emit(protocol.StreamDelta{Content: payload.Choices[0].Message.Content, ToolCalls: calls})
 		}
 		return nil
 	}
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 4096), 4*1024*1024)
+	toolCalls := map[int]*schema.ToolCall{}
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if !strings.HasPrefix(line, "data:") {
@@ -94,20 +109,63 @@ func (c *Client) Complete(ctx context.Context, input protocol.ChatRequest, emit 
 		var chunk struct {
 			Choices []struct {
 				Delta struct {
-					Content string `json:"content"`
+					Content   string `json:"content"`
+					Reasoning string `json:"reasoning_content"`
+					ToolCalls []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Type     string `json:"type"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
 				} `json:"delta"`
 			} `json:"choices"`
 		}
 		if json.Unmarshal([]byte(value), &chunk) != nil || len(chunk.Choices) == 0 {
 			continue
 		}
-		if chunk.Choices[0].Delta.Content != "" {
-			if err := emit(protocol.StreamDelta{Content: chunk.Choices[0].Delta.Content}); err != nil {
+		delta := chunk.Choices[0].Delta
+		for _, call := range delta.ToolCalls {
+			current := toolCalls[call.Index]
+			if current == nil {
+				current = &schema.ToolCall{ID: call.ID, Type: call.Type}
+				toolCalls[call.Index] = current
+			}
+			if call.ID != "" {
+				current.ID = call.ID
+			}
+			if call.Type != "" {
+				current.Type = call.Type
+			}
+			if call.Function.Name != "" {
+				current.Name += call.Function.Name
+			}
+			current.Arguments += call.Function.Arguments
+		}
+		if delta.Content != "" || delta.Reasoning != "" {
+			if err := emit(protocol.StreamDelta{Content: delta.Content, Reasoning: delta.Reasoning}); err != nil {
 				return err
 			}
 		}
 	}
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	if len(toolCalls) > 0 {
+		indices := make([]int, 0, len(toolCalls))
+		for index := range toolCalls {
+			indices = append(indices, index)
+		}
+		sort.Ints(indices)
+		calls := make([]schema.ToolCall, 0, len(indices))
+		for _, index := range indices {
+			calls = append(calls, *toolCalls[index])
+		}
+		return emit(protocol.StreamDelta{ToolCalls: calls})
+	}
+	return nil
 }
 func (c *Client) headers(req *http.Request) {
 	if c.apiKey != "" {

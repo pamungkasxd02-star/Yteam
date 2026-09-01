@@ -5,14 +5,17 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/config"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/event"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/project"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/provider"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
+	"github.com/pamungkasxd02-star/Yteam/packages/server/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/tui/src"
 )
 
@@ -21,6 +24,8 @@ func main() {
 	model := flag.String("model", "", "ID model")
 	sid := flag.String("session", "", "ID session")
 	cont := flag.Bool("continue", false, "lanjutkan session terakhir")
+	serve := flag.Int("serve", 0, "jalankan server lokal pada port ini")
+	serverToken := flag.String("server-token", "", "token server lokal")
 	flag.Usage = func() { fmt.Fprintln(os.Stderr, "YTEAM — agen pengembangan Go ringan"); flag.PrintDefaults() }
 	flag.Parse()
 	root, err := project.ResolveRoot(*dir)
@@ -43,6 +48,20 @@ func main() {
 		fail(err)
 	}
 	app := runtime.New(cfg, root, store, current, provider.New(cfg.BaseURL, cfg.APIKey))
+	journal, err := event.Open(cfg.Home)
+	if err != nil {
+		fail(err)
+	}
+	app.AttachEvents(journal)
+	if *serve > 0 {
+		srv := server.New(app, journal, *serverToken)
+		address := fmt.Sprintf("127.0.0.1:%d", *serve)
+		fmt.Fprintln(os.Stderr, "server YTEAM berjalan di http://"+address)
+		if err := http.ListenAndServe(address, srv.Handler()); err != nil {
+			fail(err)
+		}
+		return
+	}
 	message := strings.TrimSpace(strings.Join(flag.Args(), " "))
 	if message != "" {
 		if err := app.Prompt(context.Background(), message, os.Stdout); err != nil {
@@ -62,7 +81,7 @@ func main() {
 		}
 		return
 	}
-	if err := tui.Run(context.Background(), app, os.Stdin, os.Stdout); err != nil {
+	if err := tui.New(app, os.Stdin, os.Stdout).Run(context.Background()); err != nil {
 		fail(err)
 	}
 }
