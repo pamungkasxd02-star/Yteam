@@ -1,0 +1,82 @@
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/config"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/project"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/provider"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
+	"github.com/pamungkasxd02-star/Yteam/packages/tui/src"
+)
+
+func main() {
+	dir := flag.String("dir", "", "direktori proyek")
+	model := flag.String("model", "", "ID model")
+	sid := flag.String("session", "", "ID session")
+	cont := flag.Bool("continue", false, "lanjutkan session terakhir")
+	flag.Usage = func() { fmt.Fprintln(os.Stderr, "YTEAM — agen pengembangan Go ringan"); flag.PrintDefaults() }
+	flag.Parse()
+	root, err := project.ResolveRoot(*dir)
+	if err != nil {
+		fail(err)
+	}
+	cfg, err := config.Load(root)
+	if err != nil {
+		fail(err)
+	}
+	if *model != "" {
+		cfg.Model = *model
+	}
+	store, err := session.Open(cfg.Home, root)
+	if err != nil {
+		fail(err)
+	}
+	current, err := selectSession(store, *sid, *cont)
+	if err != nil {
+		fail(err)
+	}
+	app := runtime.New(cfg, root, store, current, provider.New(cfg.BaseURL, cfg.APIKey))
+	message := strings.TrimSpace(strings.Join(flag.Args(), " "))
+	if message != "" {
+		if err := app.Prompt(context.Background(), message, os.Stdout); err != nil {
+			fail(err)
+		}
+		return
+	}
+	if !terminal(os.Stdin) {
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fail(err)
+		}
+		if strings.TrimSpace(string(data)) != "" {
+			if err := app.Prompt(context.Background(), string(data), os.Stdout); err != nil {
+				fail(err)
+			}
+		}
+		return
+	}
+	if err := tui.Run(context.Background(), app, os.Stdin, os.Stdout); err != nil {
+		fail(err)
+	}
+}
+func selectSession(store *session.Store, id string, cont bool) (*session.Session, error) {
+	if id != "" {
+		return store.Load(id)
+	}
+	if cont {
+		return store.Latest()
+	}
+	return store.New()
+}
+func terminal(file *os.File) bool {
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+func fail(err error) { fmt.Fprintln(os.Stderr, "gagal:", err); os.Exit(1) }
