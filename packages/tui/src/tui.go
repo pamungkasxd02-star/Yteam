@@ -38,13 +38,14 @@ type UI struct {
 	editor       *Editor
 	reducer      *TranscriptReducer
 	redraw       chan struct{}
+	autocomplete *Autocomplete
 }
 
 func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	reducer := NewTranscriptReducer()
 	current := app.CurrentSession()
 	reducer.Hydrate(current.Messages)
-	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1)}
+	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: NewAutocomplete()}
 }
 
 func (ui *UI) Run(ctx context.Context) error {
@@ -169,9 +170,22 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				continue
 			}
 			ui.editor.Insert(key.Text)
+			ui.refreshAutocomplete()
 		case KeyCtrlJ:
 			ui.editor.Newline()
+			ui.refreshAutocomplete()
+		case KeyTab:
+			if ui.autocomplete != nil && ui.autocomplete.Visible {
+				ui.autocomplete.Accept(ui.editor)
+				ui.refreshAutocomplete()
+			}
 		case KeyEnter:
+			if ui.autocomplete != nil && ui.autocomplete.Visible {
+				ui.autocomplete.Accept(ui.editor)
+				ui.refreshAutocomplete()
+				ui.draw()
+				continue
+			}
 			text := strings.TrimSpace(ui.editor.String())
 			if text == "" {
 				ui.draw()
@@ -197,23 +211,39 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.transcript = ui.app.CurrentSession().Messages
 		case KeyBackspace:
 			ui.editor.Backspace()
+			ui.refreshAutocomplete()
 		case KeyDelete:
 			ui.editor.Delete()
+			ui.refreshAutocomplete()
 		case KeyLeft:
 			ui.editor.Left()
+			ui.refreshAutocomplete()
 		case KeyRight:
 			ui.editor.Right()
+			ui.refreshAutocomplete()
 		case KeyHome:
 			ui.editor.Home()
+			ui.refreshAutocomplete()
 		case KeyEnd:
 			ui.editor.End()
+			ui.refreshAutocomplete()
 		case KeyUp:
+			if ui.autocomplete != nil && ui.autocomplete.Visible {
+				ui.autocomplete.Move(-1)
+				ui.draw()
+				continue
+			}
 			if ui.editor.Cursor() == lineStart(ui.editor.value, ui.editor.cursor) && lineStart(ui.editor.value, ui.editor.cursor) == 0 {
 				ui.editor.HistoryUp()
 			} else {
 				ui.editor.Up()
 			}
 		case KeyDown:
+			if ui.autocomplete != nil && ui.autocomplete.Visible {
+				ui.autocomplete.Move(1)
+				ui.draw()
+				continue
+			}
 			lastLine := lineEnd(ui.editor.value, ui.editor.cursor) == len(ui.editor.value)
 			if lastLine {
 				ui.editor.HistoryDown()
@@ -223,10 +253,21 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 		case KeyCtrlP:
 			ui.editor.HistoryUp()
 		case KeyEscape:
-			ui.editor.Reset()
+			if ui.autocomplete != nil && ui.autocomplete.Visible {
+				ui.autocomplete.Close()
+			} else {
+				ui.editor.Reset()
+			}
 		}
 		ui.draw()
 	}
+}
+
+func (ui *UI) refreshAutocomplete() {
+	if ui.autocomplete == nil {
+		return
+	}
+	ui.autocomplete.Refresh(ui.editor.String(), ui.editor.Cursor(), ui.app.Root)
 }
 
 func (ui *UI) handleQuestionKey(ctx context.Context, key Key) bool {
@@ -491,6 +532,16 @@ func (ui *UI) draw() {
 			fmt.Fprintf(ui.out, "%s%s — %s\n", marker, item.Label, item.Description)
 		}
 		fmt.Fprintln(ui.out, "Ketik: up/down, /filter <teks>, enter/select, esc")
+	}
+	if ui.autocomplete != nil && ui.autocomplete.Visible {
+		fmt.Fprintf(ui.out, "\nAutocomplete %s: %s\n", ui.autocomplete.Kind, ui.autocomplete.Query)
+		for index, item := range ui.autocomplete.Items {
+			marker := "  "
+			if index == ui.autocomplete.Index {
+				marker = "> "
+			}
+			fmt.Fprintf(ui.out, "%s%s — %s\n", marker, item.Label, item.Description)
+		}
 	}
 	pending := ui.app.PendingPermissionsForSession(ui.app.CurrentSession().ID)
 	if len(pending) > 0 {
