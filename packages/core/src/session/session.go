@@ -35,6 +35,7 @@ type Session struct {
 type Store struct {
 	sessions, directory string
 	mu                  sync.Mutex
+	inputs              *InputQueue
 }
 
 func Open(home, directory string) (*Store, error) {
@@ -42,8 +43,14 @@ func Open(home, directory string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	return &Store{sessions: dir, directory: directory}, nil
+	inputs, err := OpenInputQueue(home)
+	if err != nil {
+		return nil, err
+	}
+	return &Store{sessions: dir, directory: directory, inputs: inputs}, nil
 }
+
+func (s *Store) Inputs() *InputQueue { return s.inputs }
 
 func (s *Store) New() (*Session, error) {
 	buf := make([]byte, 12)

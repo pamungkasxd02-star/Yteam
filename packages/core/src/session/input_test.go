@@ -19,11 +19,17 @@ func TestInputQueuePromotesSteerAndOneQueuedInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	items := queue.Promote("ses_test")
+	items, err := queue.Promote("ses_test")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(items) != 2 || items[0].ID != steer.ID || items[1].ID != first.ID {
 		t.Fatalf("promoted = %#v", items)
 	}
-	items = queue.Promote("ses_test")
+	items, err = queue.Promote("ses_test")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(items) != 1 || items[0].ID != second.ID {
 		t.Fatalf("second promotion = %#v", items)
 	}
@@ -44,5 +50,30 @@ func TestInputQueueWaitAndInterrupt(t *testing.T) {
 	go func() { _, _ = queue.Admit("ses_test", "wake", DeliveryQueue) }()
 	if err := queue.Wait(ctx, "ses_test"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestInputQueueReplaysAdmissionAndPromotionAfterRestart(t *testing.T) {
+	home := t.TempDir()
+	first, err := OpenInputQueue(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := first.Admit("ses_restart", "persist me", DeliverySteer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := first.PromoteByID(item.ID); err != nil || !ok {
+		t.Fatal("promotion failed")
+	}
+	second, err := OpenInputQueue(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pending := second.Pending("ses_restart"); len(pending) != 0 {
+		t.Fatalf("pending after replay = %#v", pending)
+	}
+	if items, err := second.Promote("ses_restart"); err != nil || len(items) != 0 {
+		t.Fatalf("re-promoted = %#v", items)
 	}
 }

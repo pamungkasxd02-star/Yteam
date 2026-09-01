@@ -56,7 +56,7 @@ func New(cfg config.Config, root string, store *session.Store, current *session.
 		Permissions: permissions,
 		Agent:       "build",
 		Model:       cfg.Model,
-		Inputs:      session.NewInputQueue(),
+		Inputs:      store.Inputs(),
 		cancelRuns:  map[string]context.CancelFunc{},
 	}
 }
@@ -273,7 +273,8 @@ func (r *Runtime) PromoteInputs(sessionID string) []session.Input {
 	if r.Inputs == nil {
 		return nil
 	}
-	return r.Inputs.Promote(sessionID)
+	items, _ := r.Inputs.Promote(sessionID)
+	return items
 }
 
 func (r *Runtime) InterruptSession(sessionID string) {
@@ -472,7 +473,9 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 	if err != nil {
 		return err
 	}
-	r.Inputs.PromoteByID(input.ID)
+	if _, _, err := r.Inputs.PromoteByID(input.ID); err != nil {
+		return err
+	}
 	user := session.Message{Role: "user", Content: text}
 	if err := r.Store.Append(current.ID, user); err != nil {
 		return err
