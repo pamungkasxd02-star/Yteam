@@ -39,3 +39,27 @@ func TestPickerSelectsByNumberAfterFilter(t *testing.T) {
 		t.Fatal("invalid numeric parsing")
 	}
 }
+
+func TestPickerSupportsPageHomeAndEndNavigation(t *testing.T) {
+	items := make([]PickerItem, 12)
+	for index := range items {
+		items[index] = PickerItem{ID: "item-" + string(rune('a'+index)), Label: "item"}
+	}
+	picker := NewPicker("Commands", items)
+	picker.Page(1)
+	if picker.Index != 5 {
+		t.Fatalf("page down index = %d", picker.Index)
+	}
+	picker.End()
+	if picker.Index != 11 {
+		t.Fatalf("end index = %d", picker.Index)
+	}
+	picker.Page(-1)
+	if picker.Index != 6 {
+		t.Fatalf("page up index = %d", picker.Index)
+	}
+	picker.Home()
+	if picker.Index != 0 {
+		t.Fatalf("home index = %d", picker.Index)
+	}
+}

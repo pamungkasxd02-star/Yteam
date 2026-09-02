@@ -55,6 +55,30 @@ func (p *Picker) Move(delta int) {
 	}
 }
 
+func (p *Picker) Page(delta int) {
+	items := p.Filtered()
+	if len(items) == 0 {
+		p.Index = 0
+		return
+	}
+	if delta < 0 {
+		p.Index -= 5
+	} else {
+		p.Index += 5
+	}
+	p.clamp()
+}
+
+func (p *Picker) Home() {
+	p.Index = 0
+	p.clamp()
+}
+
+func (p *Picker) End() {
+	p.Index = len(p.Filtered()) - 1
+	p.clamp()
+}
+
 func (p *Picker) SetQuery(query string) { p.Query = query; p.Index = 0; p.clamp() }
 
 func (p *Picker) Selected() (PickerItem, bool) {

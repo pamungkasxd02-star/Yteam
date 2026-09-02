@@ -703,6 +703,14 @@ func (ui *UI) handlePickerKey(ctx context.Context, key Key) error {
 		ui.picker.Move(-1)
 	case KeyDown:
 		ui.picker.Move(1)
+	case KeyPageUp:
+		ui.picker.Page(-1)
+	case KeyPageDown:
+		ui.picker.Page(1)
+	case KeyHome:
+		ui.picker.Home()
+	case KeyEnd:
+		ui.picker.End()
 	case KeyBackspace:
 		ui.picker.SetQuery(dropLastRune(ui.picker.Query))
 	case KeyText:
