@@ -265,16 +265,14 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				ui.editor.Set(normalizePromptContent(value))
 			}
 		case KeyCtrlN:
-			ui.editor.Newline()
-			ui.promptParts = nil
+			ui.insertEditorText("\n")
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyText:
 			if ui.handlePermissionKey(key) {
 				continue
 			}
-			ui.editor.Insert(key.Text)
-			ui.promptParts = nil
+			ui.insertEditorText(key.Text)
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyPaste:
@@ -360,13 +358,15 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				ui.promptDone <- ui.app.PromptWithParts(ctx, prompt, promptParts, ui)
 			}(expanded, parts)
 		case KeyBackspace:
+			start := previousClusterStart(ui.editor.value, ui.editor.cursor)
+			ui.rebaseEditorEdit(start, ui.editor.cursor, "")
 			ui.editor.Backspace()
-			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyDelete:
+			end := nextClusterEnd(ui.editor.value, ui.editor.cursor)
+			ui.rebaseEditorEdit(ui.editor.cursor, end, "")
 			ui.editor.Delete()
-			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyLeft:
@@ -379,22 +379,25 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.refreshAutocomplete()
 		case KeyWordLeft:
 			ui.editor.WordLeft()
-			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyWordRight:
 			ui.editor.WordRight()
-			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyDeleteWordBackward:
-			ui.editor.DeleteWordBackward()
-			ui.promptParts = nil
+			before := ui.editor.cursor
+			ui.editor.WordLeft()
+			ui.rebaseEditorEdit(ui.editor.cursor, before, "")
+			ui.editor.value = append(ui.editor.value[:ui.editor.cursor], ui.editor.value[before:]...)
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyDeleteWordForward:
-			ui.editor.DeleteWordForward()
-			ui.promptParts = nil
+			before := ui.editor.cursor
+			ui.editor.WordRight()
+			ui.rebaseEditorEdit(before, ui.editor.cursor, "")
+			ui.editor.value = append(ui.editor.value[:before], ui.editor.value[ui.editor.cursor:]...)
+			ui.editor.cursor = before
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyHome:
@@ -459,7 +462,7 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			if ui.autocomplete != nil && ui.autocomplete.Visible {
 				ui.autocomplete.Close()
 			} else {
-				ui.editor.Reset()
+				ui.clearPrompt()
 			}
 		}
 		ui.draw()
@@ -477,13 +480,13 @@ func (ui *UI) insertPaste(value string) {
 	normalized := normalizePasteText(value)
 	virtual, summarized := pastedVirtualText(normalized)
 	if !summarized {
-		ui.editor.Insert(normalized)
-		ui.promptParts = nil
+		ui.insertEditorText(normalized)
 		ui.resetPromptHistoryNavigation()
 		ui.refreshAutocomplete()
 		return
 	}
 	start := ui.editor.Cursor()
+	ui.rebaseEditorEdit(start, start, virtual+" ")
 	ui.editor.Insert(virtual + " ")
 	ui.promptParts = append(ui.promptParts, schema.MessagePart{
 		Type:   "text",
@@ -492,6 +495,16 @@ func (ui *UI) insertPaste(value string) {
 	})
 	ui.resetPromptHistoryNavigation()
 	ui.refreshAutocomplete()
+}
+
+func (ui *UI) insertEditorText(value string) {
+	start := ui.editor.Cursor()
+	ui.rebaseEditorEdit(start, start, value)
+	ui.editor.Insert(value)
+}
+
+func (ui *UI) rebaseEditorEdit(start, end int, inserted string) {
+	ui.promptParts = rebasePromptParts(ui.promptParts, start, end, inserted)
 }
 
 func (ui *UI) acceptAutocomplete() {
@@ -504,6 +517,12 @@ func (ui *UI) acceptAutocomplete() {
 	}
 	kind := ui.autocomplete.Kind
 	start := ui.autocomplete.Start
+	end := ui.editor.Cursor()
+	replacement := item.ID
+	if kind == AutocompleteFile {
+		replacement = "@" + replacement
+	}
+	ui.rebaseEditorEdit(start, end, replacement)
 	if !ui.autocomplete.Accept(ui.editor) {
 		return
 	}
