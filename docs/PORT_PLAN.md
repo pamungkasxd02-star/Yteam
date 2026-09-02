@@ -71,6 +71,8 @@ The Go foundation currently has working implementations and tests for:
   rules;
 - server/client run-state contract with typed status mapping for missing,
   forbidden, validation, and internal errors;
+- agent catalog behavior with persisted selection, agent-specific system
+  prompts, CLI/environment selection, and plan-mode read-only tool filtering;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,

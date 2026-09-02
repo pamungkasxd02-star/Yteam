@@ -2,6 +2,21 @@ package session
 
 import "time"
 
+func (s *Store) SetAgent(id, name string) (*Session, error) {
+	if err := validID(id); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, err := s.loadLocked(id)
+	if err != nil {
+		return nil, err
+	}
+	sess.Agent = name
+	sess.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	return sess, s.writeMetaLocked(sess)
+}
+
 const (
 	RunIdle        = "idle"
 	RunBusy        = "busy"

@@ -43,6 +43,7 @@ type Session struct {
 	RunStartedAt  string       `json:"run_started_at,omitempty"`
 	RunFinishedAt string       `json:"run_finished_at,omitempty"`
 	ContextEpoch  uint64       `json:"context_epoch,omitempty"`
+	Agent         string       `json:"agent,omitempty"`
 	Messages      []Message    `json:"-"`
 	Revert        *RevertState `json:"revert,omitempty"`
 }

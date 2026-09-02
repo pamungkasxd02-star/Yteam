@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	agentpkg "github.com/pamungkasxd02-star/Yteam/packages/agent/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/config"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/event"
 	gitstatus "github.com/pamungkasxd02-star/Yteam/packages/core/src/git"
@@ -69,16 +70,27 @@ func New(cfg config.Config, root string, store *session.Store, current *session.
 	}
 	tools := tool.Builtins(permissions)
 	tools.Add(tool.Question{Manager: questionsAdapter{manager: questions}})
+	selectedAgent := firstAgent(cfg.Agent)
+	if current != nil && current.Agent != "" {
+		selectedAgent = firstAgent(current.Agent)
+	}
+	if current != nil {
+		current.Agent = selectedAgent
+		if _, err := store.SetAgent(current.ID, selectedAgent); err != nil {
+			// Runtime construction remains non-failing for compatibility; the
+			// in-memory selection still applies and explicit switches retry it.
+		}
+	}
 	return &Runtime{
 		Config:      cfg,
 		Root:        root,
 		Store:       store,
 		Session:     current,
 		Provider:    client,
-		Runner:      &runner.Runner{Provider: client, Store: store, Tools: tools},
+		Runner:      &runner.Runner{Provider: client, Store: store, Tools: tools, Agent: selectedAgent},
 		Coordinator: runner.NewCoordinator(),
 		Permissions: permissions,
-		Agent:       "build",
+		Agent:       selectedAgent,
 		Model:       cfg.Model,
 		Inputs:      store.Inputs(),
 		cancelRuns:  map[string]context.CancelFunc{},
@@ -88,6 +100,13 @@ func New(cfg config.Config, root string, store *session.Store, current *session.
 }
 
 type questionsAdapter struct{ manager *question.Manager }
+
+func firstAgent(name string) string {
+	if _, ok := agentpkg.Find(name); ok {
+		return name
+	}
+	return "build"
+}
 
 func (a questionsAdapter) AskQuestion(sessionID string, items []schema.QuestionInfo, toolRef *schema.QuestionToolRef) (schema.QuestionRequest, error) {
 	return a.manager.Ask(sessionID, items, toolRef)
@@ -112,7 +131,7 @@ func (r *Runtime) RunnerTools() []schema.ToolDefinition {
 	if r.Runner == nil || r.Runner.Tools == nil {
 		return nil
 	}
-	return r.Runner.Tools.Definitions()
+	return r.Runner.ToolDefinitions()
 }
 
 func (r *Runtime) SetApproval(approve func(permission.Request) permission.Reply) {
@@ -131,12 +150,24 @@ func (r *Runtime) ActiveRuns() []string {
 
 func (r *Runtime) SetAgent(name string) error {
 	name = strings.TrimSpace(name)
-	if name != "build" && name != "plan" {
+	if _, ok := agentpkg.Find(name); !ok {
 		return fmt.Errorf("unknown agent: %s", name)
 	}
 	r.mu.Lock()
 	r.Agent = name
+	r.Config.Agent = name
+	if r.Runner != nil {
+		r.Runner.Agent = name
+	}
+	current := r.Session
 	r.mu.Unlock()
+	if current != nil {
+		next, err := r.Store.SetAgent(current.ID, name)
+		if err != nil {
+			return err
+		}
+		r.SwitchSession(next)
+	}
 	return nil
 }
 
@@ -147,10 +178,20 @@ func (r *Runtime) AgentName() string {
 }
 
 func (r *Runtime) Agents() []map[string]string {
-	return []map[string]string{
-		{"name": "build", "description": "Implement changes and run tools", "mode": "build"},
-		{"name": "plan", "description": "Inspect the project and propose a plan", "mode": "plan"},
+	items := agentpkg.Builtins()
+	result := make([]map[string]string, 0, len(items))
+	for _, item := range items {
+		result = append(result, map[string]string{"name": item.Name, "description": item.Description, "mode": item.Mode, "prompt": item.Prompt, "tools": strings.Join(item.Tools, ",")})
 	}
+	return result
+}
+
+func (r *Runtime) AgentPrompt() string {
+	item, ok := agentpkg.Find(r.AgentName())
+	if !ok {
+		return ""
+	}
+	return item.Prompt
 }
 
 func (r *Runtime) SetModel(model string) error {
@@ -219,14 +260,10 @@ func (r *Runtime) Skills() ([]skill.Skill, error) {
 
 func (r *Runtime) SystemPrompt() string {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
-	if r.SkillContext == "" {
-		return r.Config.SystemPrompt
-	}
-	if r.Config.SystemPrompt == "" {
-		return r.SkillContext
-	}
-	return r.Config.SystemPrompt + "\n\n" + r.SkillContext
+	base, skills, name := r.Config.SystemPrompt, r.SkillContext, r.Agent
+	r.mu.RUnlock()
+	item, _ := agentpkg.Find(name)
+	return strings.TrimSpace(strings.Join([]string{base, item.Prompt, skills}, "\n\n"))
 }
 
 func (r *Runtime) AddExternalTool(caller tool.ExternalCaller, name, description string, parameters map[string]any) error {
@@ -750,6 +787,7 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 		return err
 	}
 	current.Messages = append(current.Messages, user)
+	current.Agent = r.AgentName()
 	if next, stateErr := r.Store.SetRunState(current.ID, session.RunBusy, 0, ""); stateErr == nil {
 		current.RunStatus = next.RunStatus
 		current.RunAttempt = next.RunAttempt
@@ -817,6 +855,7 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 		r.runMu.Unlock()
 	}()
 	runErr := r.Coordinator.Run(runCtx, current.ID, func(runCtx context.Context) error {
+		r.Runner.Agent = r.AgentName()
 		return r.Runner.RunWithOptions(runCtx, current, r.ModelName(), r.SystemPrompt(), options)
 	})
 	if runErr != nil {

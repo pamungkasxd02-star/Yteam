@@ -26,6 +26,7 @@ import (
 func main() {
 	dir := flag.String("dir", "", "direktori proyek")
 	model := flag.String("model", "", "ID model")
+	agent := flag.String("agent", "", "nama agent")
 	sid := flag.String("session", "", "ID session")
 	cont := flag.Bool("continue", false, "lanjutkan session terakhir")
 	serve := flag.Int("serve", 0, "jalankan server lokal pada port ini")
@@ -42,6 +43,9 @@ func main() {
 	}
 	if *model != "" {
 		cfg.Model = *model
+	}
+	if *agent != "" {
+		cfg.Agent = *agent
 	}
 	store, err := session.Open(cfg.Home, root)
 	if err != nil {

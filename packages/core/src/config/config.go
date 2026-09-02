@@ -10,6 +10,7 @@ type Config struct {
 	BaseURL      string
 	APIKey       string
 	Model        string
+	Agent        string
 	SystemPrompt string
 	ProjectRoot  string
 }
@@ -24,6 +25,7 @@ func Load(projectRoot string) (Config, error) {
 		BaseURL:      first(os.Getenv("YTEAM_BASE_URL"), "https://opencode.ai/zen/v1"),
 		APIKey:       os.Getenv("YTEAM_API_KEY"),
 		Model:        first(os.Getenv("YTEAM_MODEL"), "mimo-v2.5-free"),
+		Agent:        first(os.Getenv("YTEAM_AGENT"), "build"),
 		SystemPrompt: os.Getenv("YTEAM_SYSTEM_PROMPT"),
 		ProjectRoot:  projectRoot,
 	}, nil

@@ -18,6 +18,8 @@ type Agent struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Mode        string `json:"mode"`
+	Prompt      string `json:"prompt,omitempty"`
+	Tools       string `json:"tools,omitempty"`
 }
 
 type AgentState struct {

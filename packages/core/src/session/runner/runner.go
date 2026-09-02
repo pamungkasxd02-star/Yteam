@@ -21,6 +21,7 @@ type Runner struct {
 	Tools    *tool.Registry
 	Store    *session.Store
 	MaxSteps int
+	Agent    string
 }
 
 func (r *Runner) Run(ctx context.Context, sess *session.Session, model, system string) error {
@@ -36,6 +37,13 @@ type RunOptions struct {
 }
 
 func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, model, system string, options RunOptions) error {
+	agentName := r.Agent
+	if agentName == "" {
+		agentName = sess.Agent
+	}
+	if agentName == "" {
+		agentName = "build"
+	}
 	max := r.MaxSteps
 	if max <= 0 {
 		max = 8
@@ -118,7 +126,11 @@ func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, mode
 					errs[index] = fmt.Errorf("tool registry is not configured")
 					return
 				}
-				results[index], errs[index] = r.Tools.Execute(ctx, call, tool.Context{SessionID: sess.ID, Agent: "build", CallID: call.ID, Root: sess.Directory})
+				if agentName == "plan" && call.Name != "read" && call.Name != "list" && call.Name != "glob" && call.Name != "grep" && call.Name != "question" {
+					errs[index] = fmt.Errorf("tool %q is not available in %s agent", call.Name, agentName)
+					return
+				}
+				results[index], errs[index] = r.Tools.Execute(ctx, call, tool.Context{SessionID: sess.ID, Agent: agentName, CallID: call.ID, Root: sess.Directory})
 			}(index, call)
 		}
 		group.Wait()
@@ -149,8 +161,21 @@ func (r *Runner) toolDefinitions() []schema.ToolDefinition {
 	if r.Tools == nil {
 		return nil
 	}
-	return r.Tools.Definitions()
+	definitions := r.Tools.Definitions()
+	if r.Agent != "plan" {
+		return definitions
+	}
+	filtered := make([]schema.ToolDefinition, 0, len(definitions))
+	for _, definition := range definitions {
+		switch definition.Function.Name {
+		case "read", "list", "glob", "grep", "question":
+			filtered = append(filtered, definition)
+		}
+	}
+	return filtered
 }
+
+func (r *Runner) ToolDefinitions() []schema.ToolDefinition { return r.toolDefinitions() }
 func (r *Runner) appendMessage(sess *session.Session, message session.Message) error {
 	if sess.Messages == nil {
 		sess.Messages = []session.Message{}

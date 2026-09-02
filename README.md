@@ -54,6 +54,9 @@ Interactive commands include `/models`, `/model <id>`, `/agents`,
 `/agent <name>`, `/sessions`, `/new`, `/fork`, `/rename <title>`, and
 `/export [md|json]`.
 
+Use `-agent plan` or `YTEAM_AGENT=plan` to run the read-only planning agent;
+`build` remains the default and can use the full tool set.
+
 Session API lifecycle also includes compaction and revert state. Revert metadata
 and portable pre-prompt file restoration are available through the snapshot
 service.
