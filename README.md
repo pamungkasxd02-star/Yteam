@@ -113,6 +113,11 @@ Question prompts are persisted below `YTEAM_HOME/questions.jsonl`. Pending
 questions are replayed after restart, while replies and rejections remain
 available to a waiting tool even when the answer arrives before `Await` starts.
 
+Permission prompts use the same durable approach in
+`YTEAM_HOME/permissions.jsonl`. Pending approvals survive restart, terminal
+replies are retained for waiting tools, and `Always` approvals replay as
+allow-rules without weakening the default deny/ask behavior.
+
 The verified portable build targets are Windows, Linux amd64, and macOS amd64.
 Use `go test -p 1 ./...` on constrained Windows/386 environments to avoid
 parallel compiler pagefile pressure.

@@ -49,10 +49,14 @@ type Runtime struct {
 }
 
 func New(cfg config.Config, root string, store *session.Store, current *session.Session, client *provider.Client) *Runtime {
-	permissions := permission.New([]permission.Rule{
+	defaultRules := []permission.Rule{
 		{Action: "read", Resource: "*", Effect: permission.Allow},
 		{Action: "list", Resource: "*", Effect: permission.Allow},
-	})
+	}
+	permissions, permissionErr := permission.Open(cfg.Home, defaultRules)
+	if permissionErr != nil {
+		permissions = permission.New(defaultRules)
+	}
 	questions, questionErr := question.OpenManager(cfg.Home)
 	if questionErr != nil {
 		questions = question.NewManager()

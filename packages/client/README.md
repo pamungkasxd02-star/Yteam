@@ -16,3 +16,6 @@ provider-independent `TokenEstimate` returned by the context endpoint.
 
 Question reply/reject calls remain session-bound; the server can recover
 pending requests after a restart through the same question endpoints.
+
+Permission request/reply endpoints remain session-bound at the runtime layer;
+approval state is durable under the configured application home.

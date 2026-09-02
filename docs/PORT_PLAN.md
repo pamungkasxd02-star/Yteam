@@ -66,6 +66,9 @@ The Go foundation currently has working implementations and tests for:
   compaction, durable epoch persistence, and `context` API projection;
 - durable question requests with replayable pending/terminal state, session
   binding, and reply-before-await handling across process restarts;
+- durable permission approvals with replayable pending/terminal state,
+  reply-before-await handling, session-safe requests, and persisted `Always`
+  rules;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
