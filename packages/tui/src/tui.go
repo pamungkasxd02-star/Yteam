@@ -741,7 +741,7 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 		}
 		fmt.Fprintln(ui.out, "Active model:", ui.app.ModelName())
 		return true, nil
-	case "/sessions":
+	case "/sessions", "/resume", "/continue":
 		items, err := ui.app.ListSessions()
 		if err != nil {
 			return true, err
