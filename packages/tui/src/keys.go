@@ -39,11 +39,18 @@ type Key struct {
 }
 
 type KeyReader struct {
-	reader  io.Reader
-	pending []byte
+	reader        io.Reader
+	pending       []byte
+	maxPasteBytes int
 }
 
-func NewKeyReader(reader io.Reader) *KeyReader { return &KeyReader{reader: reader} }
+const defaultMaxPasteBytes = 16 * 1024 * 1024
+
+func NewKeyReader(reader io.Reader) *KeyReader {
+	return &KeyReader{reader: reader, maxPasteBytes: defaultMaxPasteBytes}
+}
+
+func (r *KeyReader) Reset() { r.pending = nil }
 
 func (r *KeyReader) ReadKey() (Key, error) {
 	if err := r.readMore(1); err != nil && len(r.pending) == 0 {
@@ -132,23 +139,7 @@ func (r *KeyReader) escape(data []byte) (Key, error) {
 func (r *KeyReader) csi(data []byte) (Key, error) {
 	for {
 		if bytes.HasPrefix(data, []byte("\x1b[200~")) {
-			endMarker := []byte("\x1b[201~")
-			if end := bytes.Index(data[6:], endMarker); end >= 0 {
-				start := 6
-				end += start
-				text := string(data[start:end])
-				r.pending = data[end+len(endMarker):]
-				return Key{Kind: KeyPaste, Text: text}, nil
-			}
-			if err := r.readMore(len(data) + 1); err != nil {
-				text := data[6:]
-				// A truncated bracketed paste is still user input. Returning it
-				// is preferable to dropping the paste at EOF.
-				r.pending = nil
-				return Key{Kind: KeyPaste, Text: string(text)}, nil
-			}
-			data = r.pending
-			continue
+			return r.bracketedPaste(data)
 		}
 		for index := 2; index < len(data); index++ {
 			if data[index] < 0x40 || data[index] > 0x7e {
@@ -190,6 +181,68 @@ func (r *KeyReader) csi(data []byte) (Key, error) {
 		}
 		data = r.pending
 	}
+}
+
+func (r *KeyReader) bracketedPaste(data []byte) (Key, error) {
+	const startLength = len("\x1b[200~")
+	endMarker := []byte("\x1b[201~")
+	limit := r.maxPasteBytes
+	if limit <= 0 {
+		limit = defaultMaxPasteBytes
+	}
+	body := make([]byte, 0, minInt(limit, 4096))
+	overLimit := false
+	pending := append([]byte(nil), data[startLength:]...)
+	appendBody := func(value []byte) {
+		if overLimit {
+			return
+		}
+		if len(body)+len(value) > limit {
+			overLimit = true
+			body = nil
+			return
+		}
+		body = append(body, value...)
+	}
+	for {
+		if end := bytes.Index(pending, endMarker); end >= 0 {
+			appendBody(pending[:end])
+			r.pending = append([]byte(nil), pending[end+len(endMarker):]...)
+			if overLimit {
+				return Key{Kind: KeyPaste}, nil
+			}
+			return Key{Kind: KeyPaste, Text: string(body)}, nil
+		}
+
+		// Keep only enough tail to recognize an end marker split across reads.
+		keep := len(endMarker) - 1
+		if len(pending) > keep {
+			appendBody(pending[:len(pending)-keep])
+			pending = pending[len(pending)-keep:]
+		}
+		buffer := make([]byte, 4096)
+		n, err := r.reader.Read(buffer)
+		if n > 0 {
+			pending = append(pending, buffer[:n]...)
+		}
+		if err != nil {
+			appendBody(pending)
+			r.pending = nil
+			if overLimit {
+				return Key{Kind: KeyPaste}, nil
+			}
+			// Preserve the existing EOF behavior for a normal truncated paste,
+			// while still guaranteeing the configured memory bound.
+			return Key{Kind: KeyPaste, Text: string(body)}, nil
+		}
+	}
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
 }
 
 func (r *KeyReader) readMore(minimum int) error {

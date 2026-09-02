@@ -22,6 +22,8 @@ func (v *Viewport) SetSize(width, height int) {
 	}
 	if height > 0 {
 		v.Height = height
+	} else {
+		v.Height = 1
 	}
 	v.clamp()
 }

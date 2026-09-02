@@ -93,3 +93,45 @@ func TestKeyReaderDecodesWordKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestKeyReaderDropsOversizedPasteAndKeepsFollowingKey(t *testing.T) {
+	reader := NewKeyReader(strings.NewReader("\x1b[200~123456789\x1b[201~x"))
+	reader.maxPasteBytes = 8
+	key, err := reader.ReadKey()
+	if err != nil || key.Kind != KeyPaste || key.Text != "" {
+		t.Fatalf("oversized paste = %#v, %v", key, err)
+	}
+	key, err = reader.ReadKey()
+	if err != nil || key.Kind != KeyText || key.Text != "x" {
+		t.Fatalf("following key = %#v, %v", key, err)
+	}
+}
+
+func TestKeyReaderRecognizesSplitPasteEndMarkerAfterDiscard(t *testing.T) {
+	reader := NewKeyReader(&chunkReader{chunks: [][]byte{
+		[]byte("\x1b[200~123456789\x1b[20"),
+		[]byte("1~x"),
+	}})
+	reader.maxPasteBytes = 8
+	key, err := reader.ReadKey()
+	if err != nil || key.Kind != KeyPaste || key.Text != "" {
+		t.Fatalf("oversized split paste = %#v, %v", key, err)
+	}
+	key, err = reader.ReadKey()
+	if err != nil || key.Kind != KeyText || key.Text != "x" {
+		t.Fatalf("key after split marker = %#v, %v", key, err)
+	}
+}
+
+func TestKeyReaderResetClearsPendingPaste(t *testing.T) {
+	reader := NewKeyReader(strings.NewReader("\x1b[200~unfinished"))
+	if _, err := reader.ReadKey(); err != nil {
+		t.Fatal(err)
+	}
+	reader.Reset()
+	reader.reader = strings.NewReader("x")
+	key, err := reader.ReadKey()
+	if err != nil || key.Kind != KeyText || key.Text != "x" {
+		t.Fatalf("reset key = %#v, %v", key, err)
+	}
+}

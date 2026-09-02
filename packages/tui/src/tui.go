@@ -151,7 +151,12 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 	if err != nil {
 		return err
 	}
-	defer restore()
+	terminal := newTerminalModes(file, ui.out, restore)
+	if err := terminal.EnablePaste(); err != nil {
+		_ = terminal.Close()
+		return err
+	}
+	defer terminal.Close()
 	ui.draw()
 	keys := NewKeyReader(file)
 	type keyResult struct {
@@ -248,14 +253,11 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				continue
 			}
 			if text == "/editor" {
-				value, newRestore, editorErr := ui.openEditor(ctx, file, restore, "")
+				value, editorErr := ui.openEditor(ctx, terminal, "")
 				if editorErr != nil {
 					fmt.Fprintln(ui.out, "editor error:", editorErr)
 				} else if value != "" {
 					ui.editor.Set(normalizePromptContent(value))
-				}
-				if newRestore != nil {
-					restore = newRestore
 				}
 				ui.draw()
 				continue
@@ -456,20 +458,17 @@ func (ui *UI) isPromptCommand(text string) bool {
 	return ok
 }
 
-func (ui *UI) openEditor(ctx context.Context, file *os.File, restore func(), value string) (string, func(), error) {
-	restore()
-	content, editorErr := openExternalEditor(ctx, value, ui.app.Root, ui.app.Config.Home, file, ui.out, ui.out)
-	newRestore, rawErr := enableRaw(file)
-	if editorErr != nil {
-		if rawErr != nil {
-			return "", nil, fmt.Errorf("%w; terminal restore failed: %v", editorErr, rawErr)
-		}
-		return "", newRestore, editorErr
+func (ui *UI) openEditor(ctx context.Context, terminal *terminalModes, value string) (string, error) {
+	if err := terminal.Suspend(); err != nil {
+		return "", err
 	}
-	if rawErr != nil {
-		return "", nil, rawErr
+	content, editorErr := openExternalEditor(ctx, value, ui.app.Root, ui.app.Config.Home, terminal.file, ui.out, ui.out)
+	if resumeErr := terminal.Resume(); editorErr == nil && resumeErr != nil {
+		return "", resumeErr
+	} else if editorErr != nil && resumeErr != nil {
+		return "", fmt.Errorf("%w; terminal resume failed: %v", editorErr, resumeErr)
 	}
-	return content, newRestore, nil
+	return content, editorErr
 }
 
 func (ui *UI) handleQuestionKey(ctx context.Context, key Key) bool {
