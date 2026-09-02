@@ -12,12 +12,12 @@ compatibility.
 | `agent` | built-in build/plan catalog |
 | `protocol` | foundation contracts |
 | `schema` | foundation data types |
-| `tui` | Home/Session terminal foundation; full parity staged |
+| `tui` | English Home/Session terminal UI with prompt history, parts, input display-width handling, viewport, dialogs, and staged OpenCode parity |
 | `server` | core HTTP API and SSE |
 | `opencode/src/mcp` | MCP stdio/remote transport, initialization, pagination, and startup config |
 | `opencode/src/lsp` | LSP JSON-RPC lifecycle, reusable client selection, and advanced operations |
 | `plugin` | portable subprocess JSON-RPC plugin lifecycle and tool bridge |
 | `client` | typed HTTP/SSE SDK for server and session contracts |
 | `command` | Markdown command registry, hints, and template expansion |
-| `skill` | `SKILL.md` discovery |
+| `skill` | `SKILL.md` discovery and skill-command metadata |
 | all other `packages/*` | boundary created; implementation staged |

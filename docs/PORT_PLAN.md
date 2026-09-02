@@ -79,13 +79,16 @@ The Go foundation currently has working implementations and tests for:
   environment precedence, CLI overrides, and malformed-file validation;
 - command registry with upstream `init`/`review` entries, Markdown
   frontmatter, source metadata, argument hints, `$1`–`$9`/`$ARGUMENTS`
-  expansion, and runtime/server/client listing;
-- usable TUI prompt worker and persistent prompt history matching OpenCode's
-  50-entry JSONL/dedupe/replay behavior, plus command-first piped input;
+  expansion, discovered skill commands, and runtime/server/client listing;
+- usable English TUI prompt worker and persistent prompt history matching
+  OpenCode's 50-entry JSONL/dedupe/replay behavior, typed prompt parts, tracked
+  paste expansion, and command-first piped input;
 - Git read-only helpers and `SKILL.md` discovery;
-- an OpenCode-shaped Home/Session terminal UI foundation;
-- raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
-  live transcript projection, and interactive permission approval;
+- an OpenCode-shaped English Home/Session terminal UI foundation;
+- raw-key UTF-8/ANSI input, grapheme-aware display offsets, multiline editing,
+  bracketed paste, PageUp/PageDown viewport navigation, persistent history,
+  searchable pickers, external editor integration, live transcript projection,
+  and interactive permission approval;
 - durable session input admission with `queue`/`steer`, promotion, and
   interrupt cancellation;
 - Windows, Linux, and macOS cross-builds.
