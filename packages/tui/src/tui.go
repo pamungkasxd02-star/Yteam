@@ -39,13 +39,19 @@ type UI struct {
 	reducer      *TranscriptReducer
 	redraw       chan struct{}
 	autocomplete *Autocomplete
+	questionID   string
+	questionAt   int
+	questionSet  map[int]map[int]bool
+	questionText map[int]string
+	questionMode bool
+	questionDone bool
 }
 
 func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	reducer := NewTranscriptReducer()
 	current := app.CurrentSession()
 	reducer.Hydrate(current.Messages)
-	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: NewAutocomplete()}
+	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: NewAutocomplete(), questionSet: map[int]map[int]bool{}, questionText: map[int]string{}}
 }
 
 func (ui *UI) Run(ctx context.Context) error {
@@ -273,28 +279,167 @@ func (ui *UI) refreshAutocomplete() {
 func (ui *UI) handleQuestionKey(ctx context.Context, key Key) bool {
 	items := ui.app.PendingQuestions(ui.app.CurrentSession().ID)
 	if len(items) == 0 || len(items[0].Questions) == 0 {
+		ui.resetQuestionState()
 		return false
 	}
 	request := items[0]
-	question := request.Questions[0]
+	ui.prepareQuestionState(request)
+	if ui.questionDone {
+		if key.Kind == KeyEscape {
+			ui.questionDone = false
+			return true
+		}
+		if key.Kind == KeyEnter {
+			answers, err := ui.questionAnswers(request)
+			if err != nil {
+				fmt.Fprintln(ui.out, "question error:", err)
+				return true
+			}
+			if err := ui.app.ReplyQuestion(ctx, request.SessionID, request.ID, answers); err != nil {
+				fmt.Fprintln(ui.out, "question error:", err)
+			} else {
+				ui.resetQuestionState()
+			}
+			return true
+		}
+		return key.Kind == KeyUp || key.Kind == KeyDown || key.Kind == KeyText
+	}
+	question := request.Questions[ui.questionAt]
 	if key.Kind == KeyEscape {
+		if ui.questionMode {
+			ui.questionMode = false
+			ui.questionText[ui.questionAt] = ""
+			return true
+		}
 		if err := ui.app.RejectQuestion(ctx, request.SessionID, request.ID); err != nil {
 			fmt.Fprintln(ui.out, "question error:", err)
 		}
+		ui.resetQuestionState()
 		return true
 	}
-	if key.Kind != KeyText {
-		return false
+	if ui.questionMode {
+		switch key.Kind {
+		case KeyText:
+			ui.questionText[ui.questionAt] += key.Text
+		case KeyBackspace:
+			ui.questionText[ui.questionAt] = dropLastRune(ui.questionText[ui.questionAt])
+		case KeyEnter:
+			if strings.TrimSpace(ui.questionText[ui.questionAt]) == "" {
+				return true
+			}
+			ui.questionMode = false
+			ui.advanceQuestion(request)
+		case KeyCtrlJ:
+			ui.questionText[ui.questionAt] += "\n"
+		default:
+			return true
+		}
+		return true
 	}
-	choice := atoi(key.Text)
-	if choice < 1 || choice > len(question.Options) {
-		return false
+	if key.Kind == KeyUp || key.Kind == KeyDown {
+		if len(question.Options) == 0 {
+			return true
+		}
+		if key.Kind == KeyUp {
+			ui.questionAtOption(question, -1)
+		} else {
+			ui.questionAtOption(question, 1)
+		}
+		return true
 	}
-	answer := schema.QuestionAnswer{question.Options[choice-1].Label}
-	if err := ui.app.ReplyQuestion(ctx, request.SessionID, request.ID, []schema.QuestionAnswer{answer}); err != nil {
-		fmt.Fprintln(ui.out, "question error:", err)
+	if key.Kind == KeyText && strings.TrimSpace(key.Text) == "c" && question.Custom != nil && *question.Custom {
+		ui.questionMode = true
+		return true
 	}
-	return true
+	if key.Kind == KeyText {
+		choice := atoi(key.Text)
+		if choice < 1 || choice > len(question.Options) {
+			return true
+		}
+		if question.Multiple {
+			if ui.questionSet[ui.questionAt] == nil {
+				ui.questionSet[ui.questionAt] = map[int]bool{}
+			}
+			ui.questionSet[ui.questionAt][choice-1] = !ui.questionSet[ui.questionAt][choice-1]
+			return true
+		}
+		ui.questionSet[ui.questionAt] = map[int]bool{choice - 1: true}
+		ui.advanceQuestion(request)
+		return true
+	}
+	if key.Kind == KeyEnter {
+		ui.advanceQuestion(request)
+		return true
+	}
+	return key.Kind == KeyTab || key.Kind == KeyBackspace || key.Kind == KeyDelete
+}
+
+func (ui *UI) prepareQuestionState(request schema.QuestionRequest) {
+	if ui.questionID == request.ID {
+		return
+	}
+	ui.questionID = request.ID
+	ui.questionAt = 0
+	ui.questionSet = map[int]map[int]bool{}
+	ui.questionText = map[int]string{}
+	ui.questionMode = false
+	ui.questionDone = false
+}
+
+func (ui *UI) resetQuestionState() {
+	ui.questionID = ""
+	ui.questionAt = 0
+	ui.questionSet = map[int]map[int]bool{}
+	ui.questionText = map[int]string{}
+	ui.questionMode = false
+	ui.questionDone = false
+}
+
+func (ui *UI) advanceQuestion(request schema.QuestionRequest) {
+	ui.questionAt++
+	if ui.questionAt >= len(request.Questions) {
+		ui.questionAt = len(request.Questions) - 1
+		ui.questionDone = true
+	}
+}
+
+func (ui *UI) questionAtOption(question schema.QuestionInfo, direction int) {
+	if len(question.Options) == 0 {
+		return
+	}
+	current := -1
+	for index := range question.Options {
+		if ui.questionSet[ui.questionAt] != nil && ui.questionSet[ui.questionAt][index] {
+			current = index
+			break
+		}
+	}
+	if current < 0 {
+		current = 0
+	} else {
+		current = (current + direction + len(question.Options)) % len(question.Options)
+	}
+	if !question.Multiple {
+		ui.questionSet[ui.questionAt] = map[int]bool{current: true}
+	}
+}
+
+func (ui *UI) questionAnswers(request schema.QuestionRequest) ([]schema.QuestionAnswer, error) {
+	answers := make([]schema.QuestionAnswer, len(request.Questions))
+	for index, question := range request.Questions {
+		for optionIndex, option := range question.Options {
+			if ui.questionSet[index] != nil && ui.questionSet[index][optionIndex] {
+				answers[index] = append(answers[index], option.Label)
+			}
+		}
+		if custom := strings.TrimSpace(ui.questionText[index]); custom != "" {
+			answers[index] = append(answers[index], custom)
+		}
+		if len(answers[index]) == 0 {
+			return nil, fmt.Errorf("question %d has no answer", index+1)
+		}
+	}
+	return answers, nil
 }
 
 func (ui *UI) handlePermissionKey(key Key) bool {
@@ -550,12 +695,34 @@ func (ui *UI) draw() {
 	}
 	questions := ui.app.PendingQuestions(ui.app.CurrentSession().ID)
 	if len(questions) > 0 && len(questions[0].Questions) > 0 {
-		item := questions[0].Questions[0]
-		fmt.Fprintf(ui.out, "\nPertanyaan: %s\n", item.Question)
-		for index, option := range item.Options {
-			fmt.Fprintf(ui.out, "  %d. %s — %s\n", index+1, option.Label, option.Description)
+		request := questions[0]
+		ui.prepareQuestionState(request)
+		if ui.questionDone {
+			fmt.Fprintln(ui.out, "\nSemua pertanyaan sudah dipilih.")
+			fmt.Fprintln(ui.out, "Tekan enter untuk mengirim jawaban, esc untuk membatalkan")
+		} else {
+			item := request.Questions[ui.questionAt]
+			fmt.Fprintf(ui.out, "\nPertanyaan: %s (%d/%d)\n", item.Question, ui.questionAt+1, len(request.Questions))
+			for index, option := range item.Options {
+				marker := " "
+				if ui.questionSet[ui.questionAt] != nil && ui.questionSet[ui.questionAt][index] {
+					marker = "✓"
+				}
+				fmt.Fprintf(ui.out, " %s %d. %s — %s\n", marker, index+1, option.Label, option.Description)
+			}
+			if item.Custom != nil && *item.Custom {
+				fmt.Fprintf(ui.out, "  c. jawaban custom: %s\n", ui.questionText[ui.questionAt])
+			}
+			if item.Multiple {
+				fmt.Fprintln(ui.out, "Pilih beberapa nomor; tekan enter untuk lanjut")
+			} else {
+				fmt.Fprintln(ui.out, "Ketik nomor jawaban; tekan enter untuk lanjut")
+			}
+			if ui.questionMode {
+				fmt.Fprintln(ui.out, "Jawaban custom (ketik lalu enter):", ui.questionText[ui.questionAt])
+			}
+			fmt.Fprintln(ui.out, "Tekan esc untuk kembali/menolak")
 		}
-		fmt.Fprintln(ui.out, "Ketik nomor jawaban atau esc untuk menolak")
 	}
 	fmt.Fprintln(ui.out, strings.Repeat("─", 72))
 	fmt.Fprintf(ui.out, "agent: %s  |  model: %s  |  /help /models /agents /sessions /new /exit\n", ui.app.AgentName(), ui.app.ModelName())
