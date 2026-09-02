@@ -26,10 +26,10 @@ func TestHomeAndPickerRenderContainsUserFacingState(t *testing.T) {
 	app := runtime.New(config.Config{Home: home, Model: "test-model"}, root, store, current, provider.New("http://127.0.0.1:1", ""))
 	var output bytes.Buffer
 	ui := New(app, bytes.NewBuffer(nil), &output)
-	ui.picker = NewPicker("Pilih agent", []PickerItem{{ID: "build", Label: "build", Description: "Implement changes"}})
+	ui.picker = NewPicker("Select agent", []PickerItem{{ID: "build", Label: "build", Description: "Implement changes"}})
 	ui.draw()
 	text := output.String()
-	for _, expected := range []string{"YTEAM", "Home", "Pilih agent", "build", "test-model"} {
+	for _, expected := range []string{"YTEAM", "Home", "Select agent", "build", "test-model"} {
 		if !bytes.Contains([]byte(text), []byte(expected)) {
 			t.Fatalf("missing %q in %s", expected, text)
 		}
@@ -57,7 +57,7 @@ func TestPermissionPromptIsRendered(t *testing.T) {
 	var output bytes.Buffer
 	ui := New(app, bytes.NewBuffer(nil), &output)
 	ui.draw()
-	for _, expected := range []string{"Izin diperlukan", "edit", "note.txt", "y=sekali", "a=selalu", "n=tolak"} {
+	for _, expected := range []string{"Permission required", "edit", "note.txt", "y=once", "a=always", "n=reject"} {
 		if !bytes.Contains(output.Bytes(), []byte(expected)) {
 			t.Fatalf("missing %q in %s", expected, output.String())
 		}
@@ -86,7 +86,7 @@ func TestQuestionPromptIsRendered(t *testing.T) {
 	var output bytes.Buffer
 	ui := New(app, bytes.NewBuffer(nil), &output)
 	ui.draw()
-	for _, expected := range []string{"Pertanyaan: Use Go?", "1. Yes", "Ketik nomor jawaban"} {
+	for _, expected := range []string{"Question: Use Go?", "1. Yes", "Type an answer number"} {
 		if !bytes.Contains(output.Bytes(), []byte(expected)) {
 			t.Fatalf("missing %q in %s", expected, output.String())
 		}

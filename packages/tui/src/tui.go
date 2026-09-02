@@ -3,6 +3,7 @@ package tui
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -44,6 +45,7 @@ type UI struct {
 	promptBusy    bool
 	promptDone    chan error
 	promptHistory *PromptHistory
+	promptParts   []schema.MessagePart
 	questionID    string
 	questionAt    int
 	questionSet   map[int]map[int]bool
@@ -88,7 +90,7 @@ func (ui *UI) Run(ctx context.Context) error {
 			return scanner.Err()
 		}
 		line := normalizeLine(scanner.Text())
-		if line == "\x03" || strings.TrimSpace(line) == "/exit" || strings.TrimSpace(line) == "/quit" {
+		if line == "\x03" || strings.TrimSpace(line) == "/exit" || strings.TrimSpace(line) == "/quit" || strings.TrimSpace(line) == "/q" {
 			return nil
 		}
 		if ui.picker != nil {
@@ -210,14 +212,16 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				continue
 			}
 			ui.editor.Insert(key.Text)
+			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyPaste:
-			ui.editor.Insert(key.Text)
+			ui.insertPaste(key.Text)
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyCtrlJ:
 			ui.editor.Newline()
+			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyTab:
@@ -239,7 +243,7 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				continue
 			}
 			if ui.promptBusy {
-				fmt.Fprintln(ui.out, "\nRun masih berjalan. Tekan Ctrl+C untuk membatalkan.")
+				fmt.Fprintln(ui.out, "\nA run is still active. Press Ctrl+C to interrupt it.")
 				ui.draw()
 				continue
 			}
@@ -256,13 +260,16 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				ui.draw()
 				continue
 			}
+			parts := clonePromptParts(ui.promptParts)
+			expanded := expandTrackedPastedText(content, parts)
 			ui.editor.AddHistory(content)
 			if ui.promptHistory != nil {
-				if err := ui.promptHistory.Append(content); err != nil {
+				if err := ui.promptHistory.Append(PromptEntry{Input: content, Mode: "normal", Parts: parts}); err != nil {
 					fmt.Fprintln(ui.out, "history error:", err)
 				}
 			}
 			ui.editor.Reset()
+			ui.promptParts = nil
 			if strings.HasPrefix(text, "/") {
 				if ui.isPromptCommand(text) {
 					ui.route = RouteSession
@@ -274,7 +281,7 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 					ui.draw()
 					continue
 				}
-				if text == "/exit" || text == "/quit" {
+				if text == "/exit" || text == "/quit" || text == "/q" {
 					ui.app.InterruptSession(ui.app.CurrentSession().ID)
 					return nil
 				}
@@ -290,31 +297,37 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			}
 			ui.route = RouteSession
 			ui.promptBusy = true
-			go func() {
-				ui.promptDone <- ui.app.Prompt(ctx, content, ui)
-			}()
+			go func(prompt string, promptParts []schema.MessagePart) {
+				ui.promptDone <- ui.app.PromptWithParts(ctx, prompt, promptParts, ui)
+			}(expanded, parts)
 		case KeyBackspace:
 			ui.editor.Backspace()
+			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyDelete:
 			ui.editor.Delete()
+			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyLeft:
 			ui.editor.Left()
+			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyRight:
 			ui.editor.Right()
+			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyHome:
 			ui.editor.Home()
+			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyEnd:
 			ui.editor.End()
+			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyUp:
@@ -325,7 +338,8 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			}
 			if ui.promptHistory != nil {
 				if value, ok := ui.promptHistory.Move(-1, ui.editor.String()); ok {
-					ui.editor.Set(value)
+					ui.editor.Set(value.Input)
+					ui.promptParts = clonePromptParts(value.Parts)
 				}
 			} else if ui.editor.Cursor() == lineStart(ui.editor.value, ui.editor.cursor) && lineStart(ui.editor.value, ui.editor.cursor) == 0 {
 				ui.editor.HistoryUp()
@@ -341,7 +355,8 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			lastLine := lineEnd(ui.editor.value, ui.editor.cursor) == len(ui.editor.value)
 			if ui.promptHistory != nil {
 				if value, ok := ui.promptHistory.Move(1, ui.editor.String()); ok {
-					ui.editor.Set(value)
+					ui.editor.Set(value.Input)
+					ui.promptParts = clonePromptParts(value.Parts)
 				}
 			} else if lastLine {
 				ui.editor.HistoryDown()
@@ -357,7 +372,8 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 		case KeyCtrlP:
 			if ui.promptHistory != nil {
 				if value, ok := ui.promptHistory.Move(-1, ui.editor.String()); ok {
-					ui.editor.Set(value)
+					ui.editor.Set(value.Input)
+					ui.promptParts = clonePromptParts(value.Parts)
 				}
 			} else {
 				ui.editor.HistoryUp()
@@ -378,6 +394,27 @@ func (ui *UI) refreshAutocomplete() {
 		return
 	}
 	ui.autocomplete.Refresh(ui.editor.String(), ui.editor.Cursor(), ui.app.Root)
+}
+
+func (ui *UI) insertPaste(value string) {
+	normalized := normalizePasteText(value)
+	virtual, summarized := pastedVirtualText(normalized)
+	if !summarized {
+		ui.editor.Insert(normalized)
+		ui.promptParts = nil
+		ui.resetPromptHistoryNavigation()
+		ui.refreshAutocomplete()
+		return
+	}
+	start := ui.editor.Cursor()
+	ui.editor.Insert(virtual + " ")
+	ui.promptParts = append(ui.promptParts, schema.MessagePart{
+		Type:   "text",
+		Text:   normalized,
+		Source: &schema.PromptPartSource{Text: &schema.PromptTextSource{Start: start, End: start + len([]rune(virtual)), Value: virtual}},
+	})
+	ui.resetPromptHistoryNavigation()
+	ui.refreshAutocomplete()
 }
 
 func (ui *UI) resetPromptHistoryNavigation() {
@@ -651,6 +688,23 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 	case "/home":
 		ui.route = RouteHome
 		return true, nil
+	case "/status", "/debug":
+		ui.app.Status(ui.out)
+		return true, nil
+	case "/mcps":
+		value := ui.app.MCP()
+		data, _ := json.MarshalIndent(value, "", "  ")
+		fmt.Fprintln(ui.out, string(data))
+		return true, nil
+	case "/skills":
+		items, err := ui.app.Skills()
+		if err != nil {
+			return true, err
+		}
+		for _, item := range items {
+			fmt.Fprintf(ui.out, "%s — %s\n", item.Name, item.Description)
+		}
+		return true, nil
 	case "/palette":
 		ui.palette = true
 		ui.paletteQuery = ""
@@ -665,27 +719,27 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 		for _, model := range models {
 			items = append(items, PickerItem{ID: model.ID, Label: model.ID})
 		}
-		ui.picker, ui.pickerKind = NewPicker("Pilih model", items), "model"
+		ui.picker, ui.pickerKind = NewPicker("Select model", items), "model"
 		return true, nil
 	case "/agent", "/agents":
 		if len(parts) < 2 {
-			ui.picker, ui.pickerKind = NewPicker("Pilih agent", []PickerItem{{ID: "build", Label: "build", Description: "Implement changes and run tools"}, {ID: "plan", Label: "plan", Description: "Inspect the project and propose a plan"}}), "agent"
+			ui.picker, ui.pickerKind = NewPicker("Select agent", []PickerItem{{ID: "build", Label: "build", Description: "Implement changes and run tools"}, {ID: "plan", Label: "plan", Description: "Inspect the project and propose a plan"}}), "agent"
 			return true, nil
 		}
 		if err := ui.app.SetAgent(parts[1]); err != nil {
 			return true, err
 		}
-		fmt.Fprintln(ui.out, "Agent aktif:", ui.app.AgentName())
+		fmt.Fprintln(ui.out, "Active agent:", ui.app.AgentName())
 		return true, nil
 	case "/model":
 		if len(parts) < 2 {
-			fmt.Fprintln(ui.out, "Model aktif:", ui.app.ModelName())
+			fmt.Fprintln(ui.out, "Active model:", ui.app.ModelName())
 			return true, nil
 		}
 		if err := ui.app.SetModel(parts[1]); err != nil {
 			return true, err
 		}
-		fmt.Fprintln(ui.out, "Model aktif:", ui.app.ModelName())
+		fmt.Fprintln(ui.out, "Active model:", ui.app.ModelName())
 		return true, nil
 	case "/sessions":
 		items, err := ui.app.ListSessions()
@@ -696,7 +750,7 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 		for _, item := range items {
 			options = append(options, PickerItem{ID: item.ID, Label: item.Title, Description: item.Directory})
 		}
-		ui.picker, ui.pickerKind = NewPicker("Pilih session", options), "session"
+		ui.picker, ui.pickerKind = NewPicker("Select session", options), "session"
 		return true, nil
 	case "/new", "/clear":
 		next, err := ui.app.NewSession()
@@ -705,7 +759,7 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 		}
 		ui.route = RouteHome
 		ui.transcript = nil
-		fmt.Fprintln(ui.out, "Session baru:", next.ID)
+		fmt.Fprintln(ui.out, "New session:", next.ID)
 		return true, nil
 	case "/fork":
 		next, err := ui.app.ForkSession()
@@ -714,11 +768,11 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 		}
 		ui.route = RouteSession
 		ui.transcript = next.Messages
-		fmt.Fprintln(ui.out, "Fork session:", next.ID)
+		fmt.Fprintln(ui.out, "Forked session:", next.ID)
 		return true, nil
 	case "/rename":
 		if len(parts) < 2 {
-			return true, fmt.Errorf("penggunaan: /rename <judul>")
+			return true, fmt.Errorf("usage: /rename <title>")
 		}
 		return true, ui.app.RenameSession(strings.TrimSpace(strings.TrimPrefix(line, parts[0])))
 	default:
@@ -760,7 +814,7 @@ func (ui *UI) handlePickerLine(ctx context.Context, line string) error {
 func (ui *UI) selectPicker(_ context.Context) error {
 	item, ok := ui.picker.Selected()
 	if !ok {
-		return fmt.Errorf("tidak ada hasil pilihan")
+		return fmt.Errorf("no picker result selected")
 	}
 	kind := ui.pickerKind
 	ui.picker = nil
@@ -797,8 +851,8 @@ func (ui *UI) draw() {
 	if ui.route == RouteHome {
 		fmt.Fprintln(ui.out, "YTEAM  Home")
 		fmt.Fprintln(ui.out, "")
-		fmt.Fprintln(ui.out, "Tulis permintaan untuk memulai sesi.")
-		fmt.Fprintln(ui.out, "Contoh: Periksa struktur proyek ini")
+		fmt.Fprintln(ui.out, "Enter a prompt to start a session.")
+		fmt.Fprintln(ui.out, "Example: Inspect this project's structure")
 	} else {
 		current := ui.app.CurrentSession()
 		fmt.Fprintf(ui.out, "YTEAM  Session %s\n", current.ID)
@@ -813,10 +867,10 @@ func (ui *UI) draw() {
 		}
 	}
 	if ui.picker != nil {
-		fmt.Fprintf(ui.out, "\n%s\nCari: %s\n", ui.picker.Title, ui.picker.Query)
+		fmt.Fprintf(ui.out, "\n%s\nSearch: %s\n", ui.picker.Title, ui.picker.Query)
 		items := ui.picker.Filtered()
 		if len(items) == 0 {
-			fmt.Fprintln(ui.out, "  (tidak ada hasil)")
+			fmt.Fprintln(ui.out, "  (no results)")
 		}
 		for index, item := range items {
 			marker := "  "
@@ -825,7 +879,7 @@ func (ui *UI) draw() {
 			}
 			fmt.Fprintf(ui.out, "%s%s — %s\n", marker, item.Label, item.Description)
 		}
-		fmt.Fprintln(ui.out, "Ketik: up/down, /filter <teks>, enter/select, esc")
+		fmt.Fprintln(ui.out, "Keys: up/down, /filter <text>, enter/select, esc")
 	}
 	if ui.autocomplete != nil && ui.autocomplete.Visible {
 		fmt.Fprintf(ui.out, "\nAutocomplete %s: %s\n", ui.autocomplete.Kind, ui.autocomplete.Query)
@@ -839,19 +893,19 @@ func (ui *UI) draw() {
 	}
 	pending := ui.app.PendingPermissionsForSession(ui.app.CurrentSession().ID)
 	if len(pending) > 0 {
-		fmt.Fprintf(ui.out, "\nIzin diperlukan: %s pada %s\n", pending[0].Action, strings.Join(pending[0].Resources, ", "))
-		fmt.Fprintln(ui.out, "Tekan y=sekali, a=selalu, n=tolak")
+		fmt.Fprintf(ui.out, "\nPermission required: %s on %s\n", pending[0].Action, strings.Join(pending[0].Resources, ", "))
+		fmt.Fprintln(ui.out, "Press y=once, a=always, n=reject")
 	}
 	questions := ui.app.PendingQuestions(ui.app.CurrentSession().ID)
 	if len(questions) > 0 && len(questions[0].Questions) > 0 {
 		request := questions[0]
 		ui.prepareQuestionState(request)
 		if ui.questionDone {
-			fmt.Fprintln(ui.out, "\nSemua pertanyaan sudah dipilih.")
-			fmt.Fprintln(ui.out, "Tekan enter untuk mengirim jawaban, esc untuk membatalkan")
+			fmt.Fprintln(ui.out, "\nAll questions have been answered.")
+			fmt.Fprintln(ui.out, "Press enter to submit, esc to cancel")
 		} else {
 			item := request.Questions[ui.questionAt]
-			fmt.Fprintf(ui.out, "\nPertanyaan: %s (%d/%d)\n", item.Question, ui.questionAt+1, len(request.Questions))
+			fmt.Fprintf(ui.out, "\nQuestion: %s (%d/%d)\n", item.Question, ui.questionAt+1, len(request.Questions))
 			for index, option := range item.Options {
 				marker := " "
 				if ui.questionSet[ui.questionAt] != nil && ui.questionSet[ui.questionAt][index] {
@@ -860,21 +914,21 @@ func (ui *UI) draw() {
 				fmt.Fprintf(ui.out, " %s %d. %s — %s\n", marker, index+1, option.Label, option.Description)
 			}
 			if item.Custom != nil && *item.Custom {
-				fmt.Fprintf(ui.out, "  c. jawaban custom: %s\n", ui.questionText[ui.questionAt])
+				fmt.Fprintf(ui.out, "  c. custom answer: %s\n", ui.questionText[ui.questionAt])
 			}
 			if item.Multiple {
-				fmt.Fprintln(ui.out, "Pilih beberapa nomor; tekan enter untuk lanjut")
+				fmt.Fprintln(ui.out, "Select multiple numbers; press enter to continue")
 			} else {
-				fmt.Fprintln(ui.out, "Ketik nomor jawaban; tekan enter untuk lanjut")
+				fmt.Fprintln(ui.out, "Type an answer number; press enter to continue")
 			}
 			if ui.questionMode {
-				fmt.Fprintln(ui.out, "Jawaban custom (ketik lalu enter):", ui.questionText[ui.questionAt])
+				fmt.Fprintln(ui.out, "Custom answer (type then press enter):", ui.questionText[ui.questionAt])
 			}
-			fmt.Fprintln(ui.out, "Tekan esc untuk kembali/menolak")
+			fmt.Fprintln(ui.out, "Press esc to go back/reject")
 		}
 	}
 	fmt.Fprintln(ui.out, strings.Repeat("─", 72))
-	fmt.Fprintf(ui.out, "agent: %s  |  model: %s  |  /help /models /agents /sessions /new /exit\n", ui.app.AgentName(), ui.app.ModelName())
+	fmt.Fprintf(ui.out, "agent: %s  |  model: %s  |  /help /models /agents /sessions /new /editor /exit\n", ui.app.AgentName(), ui.app.ModelName())
 	if ui.editor != nil {
 		fmt.Fprintf(ui.out, "> %s", editorWithCaret(ui.editor))
 	} else {

@@ -25,12 +25,35 @@ type Message struct {
 }
 
 type MessagePart struct {
-	Type       string    `json:"type"`
-	Text       string    `json:"text,omitempty"`
-	ToolCall   *ToolCall `json:"tool_call,omitempty"`
-	ToolCallID string    `json:"tool_call_id,omitempty"`
-	State      string    `json:"state,omitempty"`
-	Error      string    `json:"error,omitempty"`
+	Type       string            `json:"type"`
+	Text       string            `json:"text,omitempty"`
+	ToolCall   *ToolCall         `json:"tool_call,omitempty"`
+	ToolCallID string            `json:"tool_call_id,omitempty"`
+	State      string            `json:"state,omitempty"`
+	Error      string            `json:"error,omitempty"`
+	Mime       string            `json:"mime,omitempty"`
+	Filename   string            `json:"filename,omitempty"`
+	URL        string            `json:"url,omitempty"`
+	Synthetic  bool              `json:"synthetic,omitempty"`
+	Source     *PromptPartSource `json:"source,omitempty"`
+}
+
+// PromptPartSource preserves the virtual text range used by OpenCode's TUI
+// for pasted text, file references, and agent mentions. The extra fields are
+// optional so the same durable part type remains compatible with tool parts.
+type PromptPartSource struct {
+	Type  string            `json:"type,omitempty"`
+	Path  string            `json:"path,omitempty"`
+	Start int               `json:"start,omitempty"`
+	End   int               `json:"end,omitempty"`
+	Value string            `json:"value,omitempty"`
+	Text  *PromptTextSource `json:"text,omitempty"`
+}
+
+type PromptTextSource struct {
+	Start int    `json:"start"`
+	End   int    `json:"end"`
+	Value string `json:"value"`
 }
 
 type Usage struct {

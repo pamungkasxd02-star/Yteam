@@ -13,8 +13,8 @@ func Run(ctx context.Context, app *runtime.Runtime, in io.Reader, out io.Writer)
 	// Keep piped input deterministic. Interactive terminals use the same
 	// OpenCode-shaped Home/Session state through UI, while this path remains
 	// friendly to scripts and tests.
-	fmt.Fprintln(out, "YTEAM — OpenCode portado para Go")
-	fmt.Fprintln(out, "Ketik /help untuk bantuan.")
+	fmt.Fprintln(out, "YTEAM — OpenCode-compatible terminal client")
+	fmt.Fprintln(out, "Type /help for help.")
 	scanner := bufio.NewScanner(in)
 	for {
 		fmt.Fprint(out, "\n> ")

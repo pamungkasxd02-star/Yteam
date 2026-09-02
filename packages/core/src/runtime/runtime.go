@@ -686,7 +686,7 @@ func (r *Runtime) Command(ctx context.Context, input string, out io.Writer) (boo
 		r.Status(out)
 	case "/history":
 		r.History(out)
-	case "/sessions":
+	case "/sessions", "/resume", "/continue":
 		items, err := r.ListSessions()
 		if err != nil {
 			return true, err
@@ -725,7 +725,7 @@ func (r *Runtime) Command(ctx context.Context, input string, out io.Writer) (boo
 		if err != nil {
 			return true, err
 		}
-		fmt.Fprintln(out, "Session baru:", next.ID)
+		fmt.Fprintln(out, "New session:", next.ID)
 	case "/fork":
 		next, err := r.ForkSession()
 		if err != nil {
@@ -734,7 +734,7 @@ func (r *Runtime) Command(ctx context.Context, input string, out io.Writer) (boo
 		fmt.Fprintln(out, "Fork session:", next.ID)
 	case "/rename":
 		if len(parts) < 2 {
-			fmt.Fprintln(out, "Penggunaan: /rename <judul>")
+			fmt.Fprintln(out, "Usage: /rename <title>")
 			return true, nil
 		}
 		if err := r.RenameSession(strings.TrimSpace(strings.TrimPrefix(input, parts[0]))); err != nil {
@@ -776,6 +776,10 @@ func (r *Runtime) Prompt(ctx context.Context, text string, out io.Writer) error 
 	return r.PromptDelivery(ctx, text, session.DeliveryQueue, out)
 }
 
+func (r *Runtime) PromptWithParts(ctx context.Context, text string, parts []schema.MessagePart, out io.Writer) error {
+	return r.promptDelivery(ctx, text, session.DeliveryQueue, out, "", "", "", parts)
+}
+
 func (r *Runtime) promptCommand(ctx context.Context, item commandpkg.Info, args []string, out io.Writer) error {
 	model, agentName, variant := r.ModelName(), r.AgentName(), item.Variant
 	if item.Model != "" {
@@ -784,14 +788,14 @@ func (r *Runtime) promptCommand(ctx context.Context, item commandpkg.Info, args 
 	if item.Agent != "" {
 		agentName = item.Agent
 	}
-	return r.promptDelivery(ctx, commandpkg.Expand(item.Template, args), session.DeliveryQueue, out, model, agentName, variant)
+	return r.promptDelivery(ctx, commandpkg.Expand(item.Template, args), session.DeliveryQueue, out, model, agentName, variant, nil)
 }
 
 func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery session.Delivery, out io.Writer) error {
-	return r.promptDelivery(ctx, text, delivery, out, "", "", "")
+	return r.promptDelivery(ctx, text, delivery, out, "", "", "", nil)
 }
 
-func (r *Runtime) promptDelivery(ctx context.Context, text string, delivery session.Delivery, out io.Writer, selectedModel, selectedAgent, selectedVariant string) error {
+func (r *Runtime) promptDelivery(ctx context.Context, text string, delivery session.Delivery, out io.Writer, selectedModel, selectedAgent, selectedVariant string, parts []schema.MessagePart) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil
@@ -802,7 +806,7 @@ func (r *Runtime) promptDelivery(ctx context.Context, text string, delivery sess
 	if current == nil {
 		return fmt.Errorf("session is not initialized")
 	}
-	user := session.Message{ID: session.NewMessageID(), Role: "user", Content: text}
+	user := session.Message{ID: session.NewMessageID(), Role: "user", Content: text, Parts: append([]schema.MessagePart(nil), parts...)}
 	if r.Snapshot != nil {
 		saved, err := r.Snapshot.Capture()
 		if err != nil {
@@ -954,7 +958,7 @@ func (r *Runtime) Help(out io.Writer) {
 	fmt.Fprintln(out, "  /exit       keluar")
 }
 func (r *Runtime) Status(out io.Writer) {
-	fmt.Fprintf(out, "proyek: %s\nmodel: %s\nsession: %s\njudul: %s\n", r.Root, r.Config.Model, r.Session.ID, r.Session.Title)
+	fmt.Fprintf(out, "project: %s\nmodel: %s\nsession: %s\ntitle: %s\n", r.Root, r.Config.Model, r.Session.ID, r.Session.Title)
 }
 func (r *Runtime) History(out io.Writer) {
 	for _, item := range r.Session.Messages {

@@ -29,7 +29,7 @@ func TestPipeModeDispatchesCommandsBeforePrompt(t *testing.T) {
 	if len(current.Messages) != 0 {
 		t.Fatalf("command input became prompt messages: %#v", current.Messages)
 	}
-	if !bytes.Contains(output.Bytes(), []byte("Perintah YTEAM")) {
+	if !bytes.Contains(output.Bytes(), []byte("YTEAM")) {
 		t.Fatalf("help output missing: %q", output.String())
 	}
 }

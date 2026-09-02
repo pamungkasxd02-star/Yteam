@@ -28,9 +28,12 @@ func main() {
 	agent := flag.String("agent", "", "nama agent")
 	sid := flag.String("session", "", "ID session")
 	cont := flag.Bool("continue", false, "lanjutkan session terakhir")
-	serve := flag.Int("serve", 0, "jalankan server lokal pada port ini")
-	serverToken := flag.String("server-token", "", "token server lokal")
-	flag.Usage = func() { fmt.Fprintln(os.Stderr, "YTEAM — agen pengembangan Go ringan"); flag.PrintDefaults() }
+	serve := flag.Int("serve", 0, "run the local server on this port")
+	serverToken := flag.String("server-token", "", "local server bearer token")
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "YTEAM — OpenCode-compatible development agent")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 	root, err := project.ResolveRoot(*dir)
 	if err != nil {
@@ -103,7 +106,7 @@ func main() {
 	if *serve > 0 {
 		srv := server.New(app, journal, *serverToken)
 		address := fmt.Sprintf("127.0.0.1:%d", *serve)
-		fmt.Fprintln(os.Stderr, "server YTEAM berjalan di http://"+address)
+		fmt.Fprintln(os.Stderr, "YTEAM server listening on http://"+address)
 		if err := http.ListenAndServe(address, srv.Handler()); err != nil {
 			fail(err)
 		}
@@ -148,4 +151,4 @@ func terminal(file *os.File) bool {
 	info, err := file.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
-func fail(err error) { fmt.Fprintln(os.Stderr, "gagal:", err); os.Exit(1) }
+func fail(err error) { fmt.Fprintln(os.Stderr, "error:", err); os.Exit(1) }

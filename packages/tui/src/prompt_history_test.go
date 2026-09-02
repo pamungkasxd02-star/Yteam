@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+
+	"github.com/pamungkasxd02-star/Yteam/packages/schema/src"
 )
 
 func TestPromptHistoryPersistsDeduplicatesTrimsAndReplays(t *testing.T) {
@@ -14,11 +16,11 @@ func TestPromptHistoryPersistsDeduplicatesTrimsAndReplays(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index := 0; index < MaxHistoryEntries+3; index++ {
-		if err := history.Append("prompt-" + itoa(index)); err != nil {
+		if err := history.Append(PromptEntry{Input: "prompt-" + itoa(index), Mode: "normal", Parts: []schema.MessagePart{{Type: "text", Text: "x"}}}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := history.Append("prompt-52"); err != nil {
+	if err := history.Append(PromptEntry{Input: "prompt-52"}); err != nil {
 		t.Fatal(err)
 	}
 	entries := history.Entries()
@@ -32,11 +34,11 @@ func TestPromptHistoryPersistsDeduplicatesTrimsAndReplays(t *testing.T) {
 	if len(reloaded.Entries()) != MaxHistoryEntries {
 		t.Fatalf("reloaded entries = %d", len(reloaded.Entries()))
 	}
-	if value, ok := reloaded.Move(-1, ""); !ok || value != "prompt-52" {
-		t.Fatalf("latest = %q, %v", value, ok)
+	if value, ok := reloaded.Move(-1, ""); !ok || value.Input != "prompt-52" {
+		t.Fatalf("latest = %#v, %v", value, ok)
 	}
-	if value, ok := reloaded.Move(1, "prompt-52"); !ok || value != "" {
-		t.Fatalf("draft = %q, %v", value, ok)
+	if value, ok := reloaded.Move(1, "prompt-52"); !ok || value.Input != "" {
+		t.Fatalf("draft = %#v, %v", value, ok)
 	}
 	path := filepath.Join(home, "prompt-history.jsonl")
 	if err := os.WriteFile(path, []byte("bad-json\n{\"input\":\"valid\"}\n"), 0o600); err != nil {

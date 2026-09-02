@@ -6,15 +6,18 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
+
+	"github.com/pamungkasxd02-star/Yteam/packages/schema/src"
 )
 
 const MaxHistoryEntries = 50
 
 type PromptEntry struct {
-	Input string `json:"input"`
-	Mode  string `json:"mode,omitempty"`
-	Parts []any  `json:"parts,omitempty"`
+	Input string               `json:"input"`
+	Mode  string               `json:"mode,omitempty"`
+	Parts []schema.MessagePart `json:"parts,omitempty"`
 }
 
 type PromptHistory struct {
@@ -74,14 +77,13 @@ func (h *PromptHistory) Entries() []PromptEntry {
 	return append([]PromptEntry(nil), h.entries...)
 }
 
-func (h *PromptHistory) Append(input string) error {
-	if input == "" {
+func (h *PromptHistory) Append(entry PromptEntry) error {
+	if entry.Input == "" {
 		return nil
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	entry := PromptEntry{Input: input}
-	if len(h.entries) > 0 && h.entries[len(h.entries)-1].Input == entry.Input && h.entries[len(h.entries)-1].Mode == entry.Mode {
+	if len(h.entries) > 0 && reflect.DeepEqual(h.entries[len(h.entries)-1], entry) {
 		h.cursor = len(h.entries)
 		h.draft = ""
 		return nil
@@ -100,18 +102,18 @@ func (h *PromptHistory) Append(input string) error {
 	return h.appendLocked(entry)
 }
 
-func (h *PromptHistory) Move(direction int, input string) (string, bool) {
+func (h *PromptHistory) Move(direction int, input string) (PromptEntry, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if len(h.entries) == 0 || direction == 0 {
-		return "", false
+		return PromptEntry{}, false
 	}
 	if h.cursor == len(h.entries) {
 		if input != "" {
 			h.draft = input
 		}
 	} else if input != h.entries[h.cursor].Input && input != "" {
-		return "", false
+		return PromptEntry{}, false
 	}
 	next := h.cursor + direction
 	if next < 0 {
@@ -119,10 +121,15 @@ func (h *PromptHistory) Move(direction int, input string) (string, bool) {
 	}
 	if next >= len(h.entries) {
 		h.cursor = len(h.entries)
-		return h.draft, true
+		return PromptEntry{Input: h.draft}, true
 	}
 	h.cursor = next
-	return h.entries[next].Input, true
+	return clonePromptEntry(h.entries[next]), true
+}
+
+func clonePromptEntry(entry PromptEntry) PromptEntry {
+	entry.Parts = append([]schema.MessagePart(nil), entry.Parts...)
+	return entry
 }
 
 func (h *PromptHistory) ResetNavigation() {
