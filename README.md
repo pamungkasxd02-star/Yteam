@@ -109,6 +109,10 @@ Compaction stores a monotonically increasing context epoch plus provider-
 independent token estimates before and after summarization. The estimates are
 for budgeting and observability, not a replacement for a provider tokenizer.
 
+Question prompts are persisted below `YTEAM_HOME/questions.jsonl`. Pending
+questions are replayed after restart, while replies and rejections remain
+available to a waiting tool even when the answer arrives before `Await` starts.
+
 The verified portable build targets are Windows, Linux amd64, and macOS amd64.
 Use `go test -p 1 ./...` on constrained Windows/386 environments to avoid
 parallel compiler pagefile pressure.

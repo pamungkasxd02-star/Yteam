@@ -13,3 +13,6 @@ and can be safely closed or consumed until `io.EOF`.
 
 `SessionContext` also exposes the durable `ContextEpoch` and the current
 provider-independent `TokenEstimate` returned by the context endpoint.
+
+Question reply/reject calls remain session-bound; the server can recover
+pending requests after a restart through the same question endpoints.

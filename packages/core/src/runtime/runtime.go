@@ -53,7 +53,10 @@ func New(cfg config.Config, root string, store *session.Store, current *session.
 		{Action: "read", Resource: "*", Effect: permission.Allow},
 		{Action: "list", Resource: "*", Effect: permission.Allow},
 	})
-	questions := question.NewManager()
+	questions, questionErr := question.OpenManager(cfg.Home)
+	if questionErr != nil {
+		questions = question.NewManager()
+	}
 	snapshots, err := snapshot.New(cfg.Home, root)
 	if err != nil {
 		// Runtime construction historically had no error return. Keep the
@@ -333,7 +336,12 @@ func (r *Runtime) PendingQuestions(sessionID string) []schema.QuestionRequest {
 
 func (r *Runtime) AskQuestion(sessionID string, items []schema.QuestionInfo, toolRef *schema.QuestionToolRef) (schema.QuestionRequest, error) {
 	if r.Questions == nil {
-		r.Questions = question.NewManager()
+		questions, err := question.OpenManager(r.Config.Home)
+		if err != nil {
+			r.Questions = question.NewManager()
+		} else {
+			r.Questions = questions
+		}
 	}
 	request, err := r.Questions.Ask(sessionID, items, toolRef)
 	if err == nil && r.Events != nil {

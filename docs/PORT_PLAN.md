@@ -64,6 +64,8 @@ The Go foundation currently has working implementations and tests for:
   events consumed by TUI/server projections;
 - compaction context epochs with deterministic token estimates before/after
   compaction, durable epoch persistence, and `context` API projection;
+- durable question requests with replayable pending/terminal state, session
+  binding, and reply-before-await handling across process restarts;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
