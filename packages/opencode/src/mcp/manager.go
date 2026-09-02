@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
@@ -45,7 +46,7 @@ func (m *Manager) Connect(ctx context.Context, app *runtime.Runtime, name string
 		return err
 	}
 	for _, item := range tools {
-		if err := app.AddExternalToolNamed(client, name+"_"+item.Name, item.Name, item.Description, item.InputSchema); err != nil {
+		if err := app.AddExternalToolNamed(client, ToolName(name, item.Name), item.Name, item.Description, NormalizeInputSchema(item.InputSchema)); err != nil {
 			_ = client.Close()
 			m.setStatus(Status{Name: name, Status: "failed", Error: err.Error()})
 			return err
@@ -74,7 +75,7 @@ func (m *Manager) ConnectRemote(ctx context.Context, app *runtime.Runtime, name 
 		return err
 	}
 	for _, item := range tools {
-		if err := app.AddExternalToolNamed(remote, name+"_"+item.Name, item.Name, item.Description, item.InputSchema); err != nil {
+		if err := app.AddExternalToolNamed(remote, ToolName(name, item.Name), item.Name, item.Description, NormalizeInputSchema(item.InputSchema)); err != nil {
 			m.setStatus(Status{Name: name, Status: "failed", Error: err.Error()})
 			return err
 		}
@@ -104,10 +105,39 @@ func (m *Manager) Status() []Status {
 	for _, item := range m.status {
 		result = append(result, item)
 	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
 	return result
 }
 func (m *Manager) setStatus(status Status) {
 	m.mu.Lock()
 	m.status[status.Name] = status
 	m.mu.Unlock()
+}
+
+// Sanitize matches OpenCode's MCP catalog naming rule: only ASCII letters,
+// digits, underscore, and hyphen survive. Every other rune becomes '_'.
+func Sanitize(value string) string {
+	result := []rune(value)
+	for index, item := range result {
+		if (item >= 'a' && item <= 'z') || (item >= 'A' && item <= 'Z') || (item >= '0' && item <= '9') || item == '_' || item == '-' {
+			continue
+		}
+		result[index] = '_'
+	}
+	return string(result)
+}
+
+func ToolName(clientName, name string) string { return Sanitize(clientName) + "_" + Sanitize(name) }
+
+func NormalizeInputSchema(input map[string]any) map[string]any {
+	result := make(map[string]any, len(input)+3)
+	for key, value := range input {
+		result[key] = value
+	}
+	result["type"] = "object"
+	if _, ok := result["properties"]; !ok {
+		result["properties"] = map[string]any{}
+	}
+	result["additionalProperties"] = false
+	return result
 }

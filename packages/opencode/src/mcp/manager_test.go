@@ -19,6 +19,19 @@ func TestManagerStartsEmpty(t *testing.T) {
 	}
 }
 
+func TestToolNameAndInputSchemaMatchCatalogNormalization(t *testing.T) {
+	if got := ToolName("server:name", "read.file/v2"); got != "server_name_read_file_v2" {
+		t.Fatalf("tool name = %q", got)
+	}
+	normalized := NormalizeInputSchema(map[string]any{"description": "input"})
+	if normalized["type"] != "object" || normalized["additionalProperties"] != false {
+		t.Fatalf("schema = %#v", normalized)
+	}
+	if _, ok := normalized["properties"].(map[string]any); !ok {
+		t.Fatalf("properties = %#v", normalized["properties"])
+	}
+}
+
 func TestManagerRemoteInitializesAndRegistersTools(t *testing.T) {
 	methods := []string{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
