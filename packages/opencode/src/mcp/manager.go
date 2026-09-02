@@ -17,12 +17,14 @@ type Status struct {
 
 type Manager struct {
 	mu      sync.RWMutex
-	clients map[string]*Client
+	clients map[string]closer
 	status  map[string]Status
 }
 
+type closer interface{ Close() error }
+
 func NewManager() *Manager {
-	return &Manager{clients: map[string]*Client{}, status: map[string]Status{}}
+	return &Manager{clients: map[string]closer{}, status: map[string]Status{}}
 }
 
 func (m *Manager) Connect(ctx context.Context, app *runtime.Runtime, name string, cfg Config) error {
@@ -62,6 +64,10 @@ func (m *Manager) ConnectRemote(ctx context.Context, app *runtime.Runtime, name 
 		m.setStatus(Status{Name: name, Status: "failed", Error: err.Error()})
 		return err
 	}
+	if err := remote.Initialize(ctx); err != nil {
+		m.setStatus(Status{Name: name, Status: "failed", Error: err.Error()})
+		return err
+	}
 	tools, err := remote.AllTools(ctx)
 	if err != nil {
 		m.setStatus(Status{Name: name, Status: "failed", Error: err.Error()})
@@ -74,6 +80,7 @@ func (m *Manager) ConnectRemote(ctx context.Context, app *runtime.Runtime, name 
 		}
 	}
 	m.mu.Lock()
+	m.clients[name] = remote
 	m.status[name] = Status{Name: name, Status: "connected", Tools: len(tools)}
 	m.mu.Unlock()
 	return nil

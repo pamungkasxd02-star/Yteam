@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,6 +25,7 @@ type RemoteConfig struct {
 type Remote struct {
 	cfg    RemoteConfig
 	client *http.Client
+	mu     sync.Mutex
 	next   int64
 }
 type page struct {
@@ -42,11 +44,14 @@ func NewRemote(cfg RemoteConfig) (*Remote, error) {
 }
 
 func (r *Remote) Call(ctx context.Context, method string, params any, result any) error {
-	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": r.next + 1, "method": method, "params": params})
+	r.mu.Lock()
+	r.next++
+	id := r.next
+	r.mu.Unlock()
+	body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params})
 	if err != nil {
 		return err
 	}
-	r.next++
 	for _, transport := range []string{"streamable-http", "sse"} {
 		request, err := http.NewRequestWithContext(ctx, http.MethodPost, r.cfg.URL, bytes.NewReader(body))
 		if err != nil {
@@ -76,6 +81,17 @@ func (r *Remote) Call(ctx context.Context, method string, params any, result any
 	}
 	return fmt.Errorf("MCP remote request failed: %s", method)
 }
+
+func (r *Remote) Initialize(ctx context.Context) error {
+	var result map[string]any
+	return r.Call(ctx, "initialize", map[string]any{
+		"protocolVersion": "2024-11-05",
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "yteam", "version": "0.1.0"},
+	}, &result)
+}
+
+func (r *Remote) Close() error { return nil }
 
 func (r *Remote) ListTools(ctx context.Context, cursor string) ([]Tool, string, error) {
 	params := map[string]any{}

@@ -14,7 +14,7 @@ compatibility.
 | `schema` | foundation data types |
 | `tui` | Home/Session terminal foundation; full parity staged |
 | `server` | core HTTP API and SSE |
-| `opencode/src/mcp` | MCP stdio foundation |
+| `opencode/src/mcp` | MCP stdio/remote transport, initialization, pagination, and startup config |
 | `opencode/src/lsp` | LSP JSON-RPC foundation |
 | `skill` | `SKILL.md` discovery |
 | all other `packages/*` | boundary created; implementation staged |

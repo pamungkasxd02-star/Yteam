@@ -55,8 +55,8 @@ Interactive commands include `/models`, `/model <id>`, `/agents`,
 `/export [md|json]`.
 
 Session API lifecycle also includes compaction and revert state. Revert metadata
-is preserved exactly as a lifecycle state; file restoration is deferred until
-the OpenCode Snapshot service is ported.
+and portable pre-prompt file restoration are available through the snapshot
+service.
 
 The interactive terminal uses raw ANSI/UTF-8 input when attached to a TTY:
 multiline text uses `Ctrl+J`, history uses `Up`/`Down`, pickers support
@@ -71,6 +71,25 @@ YTEAM_BASE_URL=https://opencode.ai/zen/v1
 YTEAM_MODEL=mimo-v2.5-free
 YTEAM_HOME=/path/to/yteam-data
 ```
+
+Remote MCP servers can be configured in `mcp.json` below `YTEAM_HOME`:
+
+```json
+{
+  "servers": {
+    "docs": {
+      "URL": "https://example.invalid/mcp",
+      "Headers": {"Authorization": "Bearer token"},
+      "Timeout": 30000000000
+    }
+  }
+}
+```
+
+For a single CI/container server, use `YTEAM_MCP_URL`, optional JSON
+`YTEAM_MCP_HEADERS`, and `YTEAM_MCP_TIMEOUT` such as `30s`. Remote MCP
+connections initialize and discover paginated tools during startup; failures
+are exposed in `/api/mcp` and do not prevent the CLI from starting.
 
 The default Zen public marker is only sent in memory. Secrets are not committed
 or written to the repository.

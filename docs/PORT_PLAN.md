@@ -43,6 +43,9 @@ The Go foundation currently has working implementations and tests for:
   event, model, agent, tools, and permission routes;
 - MCP stdio plus remote transport/pagination and LSP JSON-RPC
   client/operation foundations;
+- remote MCP initialization and startup configuration from portable
+  `mcp.json`/environment sources, with failed connections retained as visible
+  status instead of aborting the executable;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,

@@ -58,6 +58,15 @@ func main() {
 	app.AttachEvents(journal)
 	mcpManager := mcp.NewManager()
 	app.SetMCPStatus(func() any { return mcpManager.Status() })
+	if configs, configErr := mcp.LoadRemoteConfigs(cfg.Home); configErr != nil {
+		fmt.Fprintln(os.Stderr, "MCP config warning:", configErr)
+	} else {
+		for name, remoteConfig := range configs {
+			if connectErr := mcpManager.ConnectRemote(context.Background(), app, name, remoteConfig); connectErr != nil {
+				fmt.Fprintln(os.Stderr, "MCP remote warning:", name, connectErr)
+			}
+		}
+	}
 	lspManager := lsp.NewManager()
 	app.SetLSPStatus(func() any { return lspManager.Status() })
 	app.SetLSPExecute(func(ctx context.Context, raw any) (any, error) {
