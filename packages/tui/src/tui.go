@@ -23,30 +23,31 @@ const (
 )
 
 type UI struct {
-	app          *runtime.Runtime
-	in           io.Reader
-	out          io.Writer
-	mu           sync.Mutex
-	route        Route
-	input        string
-	palette      bool
-	paletteQuery string
-	selected     int
-	transcript   []session.Message
-	picker       *Picker
-	pickerKind   string
-	editor       *Editor
-	reducer      *TranscriptReducer
-	redraw       chan struct{}
-	autocomplete *Autocomplete
-	promptBusy   bool
-	promptDone   chan error
-	questionID   string
-	questionAt   int
-	questionSet  map[int]map[int]bool
-	questionText map[int]string
-	questionMode bool
-	questionDone bool
+	app           *runtime.Runtime
+	in            io.Reader
+	out           io.Writer
+	mu            sync.Mutex
+	route         Route
+	input         string
+	palette       bool
+	paletteQuery  string
+	selected      int
+	transcript    []session.Message
+	picker        *Picker
+	pickerKind    string
+	editor        *Editor
+	reducer       *TranscriptReducer
+	redraw        chan struct{}
+	autocomplete  *Autocomplete
+	promptBusy    bool
+	promptDone    chan error
+	promptHistory *PromptHistory
+	questionID    string
+	questionAt    int
+	questionSet   map[int]map[int]bool
+	questionText  map[int]string
+	questionMode  bool
+	questionDone  bool
 }
 
 func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
@@ -69,7 +70,8 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 			autocomplete.Commands = append(autocomplete.Commands, item)
 		}
 	}
-	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1)}
+	history, _ := OpenPromptHistory(app.Config.Home)
+	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1), promptHistory: history}
 }
 
 func (ui *UI) Run(ctx context.Context) error {
@@ -203,9 +205,11 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				continue
 			}
 			ui.editor.Insert(key.Text)
+			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyCtrlJ:
 			ui.editor.Newline()
+			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyTab:
 			if ui.autocomplete != nil && ui.autocomplete.Visible {
@@ -231,6 +235,11 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				continue
 			}
 			ui.editor.AddHistory(content)
+			if ui.promptHistory != nil {
+				if err := ui.promptHistory.Append(content); err != nil {
+					fmt.Fprintln(ui.out, "history error:", err)
+				}
+			}
 			ui.editor.Reset()
 			if strings.HasPrefix(text, "/") {
 				if ui.isPromptCommand(text) {
@@ -264,21 +273,27 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			}()
 		case KeyBackspace:
 			ui.editor.Backspace()
+			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyDelete:
 			ui.editor.Delete()
+			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyLeft:
 			ui.editor.Left()
+			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyRight:
 			ui.editor.Right()
+			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyHome:
 			ui.editor.Home()
+			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyEnd:
 			ui.editor.End()
+			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyUp:
 			if ui.autocomplete != nil && ui.autocomplete.Visible {
@@ -286,7 +301,11 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				ui.draw()
 				continue
 			}
-			if ui.editor.Cursor() == lineStart(ui.editor.value, ui.editor.cursor) && lineStart(ui.editor.value, ui.editor.cursor) == 0 {
+			if ui.promptHistory != nil {
+				if value, ok := ui.promptHistory.Move(-1, ui.editor.String()); ok {
+					ui.editor.Set(value)
+				}
+			} else if ui.editor.Cursor() == lineStart(ui.editor.value, ui.editor.cursor) && lineStart(ui.editor.value, ui.editor.cursor) == 0 {
 				ui.editor.HistoryUp()
 			} else {
 				ui.editor.Up()
@@ -298,13 +317,23 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				continue
 			}
 			lastLine := lineEnd(ui.editor.value, ui.editor.cursor) == len(ui.editor.value)
-			if lastLine {
+			if ui.promptHistory != nil {
+				if value, ok := ui.promptHistory.Move(1, ui.editor.String()); ok {
+					ui.editor.Set(value)
+				}
+			} else if lastLine {
 				ui.editor.HistoryDown()
 			} else {
 				ui.editor.Down()
 			}
 		case KeyCtrlP:
-			ui.editor.HistoryUp()
+			if ui.promptHistory != nil {
+				if value, ok := ui.promptHistory.Move(-1, ui.editor.String()); ok {
+					ui.editor.Set(value)
+				}
+			} else {
+				ui.editor.HistoryUp()
+			}
 		case KeyEscape:
 			if ui.autocomplete != nil && ui.autocomplete.Visible {
 				ui.autocomplete.Close()
@@ -321,6 +350,12 @@ func (ui *UI) refreshAutocomplete() {
 		return
 	}
 	ui.autocomplete.Refresh(ui.editor.String(), ui.editor.Cursor(), ui.app.Root)
+}
+
+func (ui *UI) resetPromptHistoryNavigation() {
+	if ui.promptHistory != nil {
+		ui.promptHistory.ResetNavigation()
+	}
 }
 
 func (ui *UI) isPromptCommand(text string) bool {

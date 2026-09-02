@@ -80,6 +80,8 @@ The Go foundation currently has working implementations and tests for:
 - command registry with upstream `init`/`review` entries, Markdown
   frontmatter, source metadata, argument hints, `$1`–`$9`/`$ARGUMENTS`
   expansion, and runtime/server/client listing;
+- usable TUI prompt worker and persistent prompt history matching OpenCode's
+  50-entry JSONL/dedupe/replay behavior, plus command-first piped input;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
