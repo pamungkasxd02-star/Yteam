@@ -36,6 +36,7 @@ type Runtime struct {
 	MCPStatus    func() any
 	SkillContext string
 	LSPStatus    func() any
+	LSPExecute   func(context.Context, any) (any, error)
 	Inputs       *session.InputQueue
 	Questions    *question.Manager
 	runMu        sync.Mutex
@@ -226,6 +227,21 @@ func (r *Runtime) LSP() any {
 		return []any{}
 	}
 	return r.LSPStatus()
+}
+
+func (r *Runtime) SetLSPExecute(execute func(context.Context, any) (any, error)) {
+	r.mu.Lock()
+	r.LSPExecute = execute
+	r.mu.Unlock()
+}
+func (r *Runtime) ExecuteLSP(ctx context.Context, input any) (any, error) {
+	r.mu.RLock()
+	execute := r.LSPExecute
+	r.mu.RUnlock()
+	if execute == nil {
+		return nil, fmt.Errorf("LSP is not configured")
+	}
+	return execute(ctx, input)
 }
 
 func (r *Runtime) PendingPermissions() []permission.Request {

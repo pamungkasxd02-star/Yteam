@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/provider"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
+	"github.com/pamungkasxd02-star/Yteam/packages/opencode/src/lsp"
 	"github.com/pamungkasxd02-star/Yteam/packages/opencode/src/mcp"
 	"github.com/pamungkasxd02-star/Yteam/packages/server/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/tui/src"
@@ -56,6 +58,23 @@ func main() {
 	app.AttachEvents(journal)
 	mcpManager := mcp.NewManager()
 	app.SetMCPStatus(func() any { return mcpManager.Status() })
+	lspManager := lsp.NewManager()
+	app.SetLSPStatus(func() any { return lspManager.Status() })
+	app.SetLSPExecute(func(ctx context.Context, raw any) (any, error) {
+		data, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("invalid LSP request")
+		}
+		encoded, err := json.Marshal(data)
+		if err != nil {
+			return nil, err
+		}
+		var input lsp.OperationInput
+		if err := json.Unmarshal(encoded, &input); err != nil {
+			return nil, err
+		}
+		return lspManager.Execute(ctx, input, root)
+	})
 	_, _ = app.Skills()
 	if *serve > 0 {
 		srv := server.New(app, journal, *serverToken)

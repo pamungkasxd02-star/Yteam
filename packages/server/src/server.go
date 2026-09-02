@@ -136,6 +136,18 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, s.Runtime.MCP())
 	case r.Method == http.MethodGet && r.URL.Path == "/api/lsp":
 		writeJSON(w, http.StatusOK, s.Runtime.LSP())
+	case r.Method == http.MethodPost && r.URL.Path == "/api/lsp":
+		var input map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		result, err := s.Runtime.ExecuteLSP(r.Context(), input)
+		if err != nil {
+			writeJSON(w, http.StatusNotImplemented, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
 	case r.Method == http.MethodGet && r.URL.Path == "/api/permission/request":
 		writeJSON(w, http.StatusOK, s.Runtime.PendingPermissions())
 	case r.Method == http.MethodGet && r.URL.Path == "/api/question":
