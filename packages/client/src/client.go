@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/permission"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
@@ -44,8 +45,8 @@ func (c *Client) Health(ctx context.Context) (map[string]any, error) {
 	return result, err
 }
 
-func (c *Client) Status(ctx context.Context) (map[string]any, error) {
-	var result map[string]any
+func (c *Client) Status(ctx context.Context) (Status, error) {
+	var result Status
 	err := c.doJSON(ctx, http.MethodGet, "/api/status", nil, &result)
 	return result, err
 }
@@ -68,6 +69,18 @@ func (c *Client) Messages(ctx context.Context, id string) ([]session.Message, er
 	return result, err
 }
 
+func (c *Client) Context(ctx context.Context, id string) (SessionContext, error) {
+	var result SessionContext
+	err := c.doJSON(ctx, http.MethodGet, sessionPath(id)+"/context", nil, &result)
+	return result, err
+}
+
+func (c *Client) History(ctx context.Context, id string) (SessionHistory, error) {
+	var result SessionHistory
+	err := c.doJSON(ctx, http.MethodGet, sessionPath(id)+"/history", nil, &result)
+	return result, err
+}
+
 func (c *Client) Models(ctx context.Context) ([]protocol.Model, error) {
 	var result []protocol.Model
 	err := c.doJSON(ctx, http.MethodGet, "/api/models", nil, &result)
@@ -80,26 +93,22 @@ func (c *Client) Tools(ctx context.Context) ([]schema.ToolDefinition, error) {
 	return result, err
 }
 
-func (c *Client) Agents(ctx context.Context) (map[string]any, error) {
-	var result map[string]any
+func (c *Client) Agents(ctx context.Context) (AgentState, error) {
+	var result AgentState
 	err := c.doJSON(ctx, http.MethodGet, "/api/agent", nil, &result)
 	return result, err
 }
 
-func (c *Client) SetModel(ctx context.Context, model string) (string, error) {
-	var result struct {
-		Current string `json:"current"`
-	}
+func (c *Client) SetModel(ctx context.Context, model string) (Selection, error) {
+	var result Selection
 	err := c.doJSON(ctx, http.MethodPost, "/api/model", map[string]string{"model": model}, &result)
-	return result.Current, err
+	return result, err
 }
 
-func (c *Client) SetAgent(ctx context.Context, agent string) (string, error) {
-	var result struct {
-		Current string `json:"current"`
-	}
+func (c *Client) SetAgent(ctx context.Context, agent string) (Selection, error) {
+	var result Selection
 	err := c.doJSON(ctx, http.MethodPost, "/api/agent", map[string]string{"name": agent}, &result)
-	return result.Current, err
+	return result, err
 }
 
 func (c *Client) NewSession(ctx context.Context) (*session.Session, error) {
@@ -217,8 +226,8 @@ func (c *Client) Export(ctx context.Context, id, format string) ([]byte, error) 
 	return io.ReadAll(io.LimitReader(response.Body, 16*1024*1024))
 }
 
-func (c *Client) Usage(ctx context.Context) (map[string]any, error) {
-	var result map[string]any
+func (c *Client) Usage(ctx context.Context) (ProviderUsage, error) {
+	var result ProviderUsage
 	err := c.doJSON(ctx, http.MethodGet, "/api/provider/usage", nil, &result)
 	return result, err
 }
@@ -243,20 +252,20 @@ func (c *Client) Skills(ctx context.Context) ([]map[string]any, error) {
 	return result, err
 }
 
-func (c *Client) MCP(ctx context.Context) ([]map[string]any, error) {
-	var result []map[string]any
+func (c *Client) MCP(ctx context.Context) ([]IntegrationStatus, error) {
+	var result []IntegrationStatus
 	err := c.doJSON(ctx, http.MethodGet, "/api/mcp", nil, &result)
 	return result, err
 }
 
-func (c *Client) LSP(ctx context.Context) ([]map[string]any, error) {
-	var result []map[string]any
+func (c *Client) LSP(ctx context.Context) ([]IntegrationStatus, error) {
+	var result []IntegrationStatus
 	err := c.doJSON(ctx, http.MethodGet, "/api/lsp", nil, &result)
 	return result, err
 }
 
-func (c *Client) Plugins(ctx context.Context) ([]map[string]any, error) {
-	var result []map[string]any
+func (c *Client) Plugins(ctx context.Context) ([]IntegrationStatus, error) {
+	var result []IntegrationStatus
 	err := c.doJSON(ctx, http.MethodGet, "/api/plugin", nil, &result)
 	return result, err
 }
@@ -300,6 +309,7 @@ func (c *Client) CommitRevert(ctx context.Context, id string) error {
 type EventStream struct {
 	response *http.Response
 	scanner  *bufio.Scanner
+	mu       sync.Mutex
 	closed   bool
 }
 
@@ -318,25 +328,37 @@ func (c *Client) Events(ctx context.Context, id string, after uint64) (*EventStr
 }
 
 func (s *EventStream) Next() (schema.Event, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.closed {
 		return schema.Event{}, io.EOF
 	}
 	var eventType string
 	var data strings.Builder
+	flush := func() (schema.Event, error) {
+		if data.Len() == 0 {
+			return schema.Event{}, io.EOF
+		}
+		var result schema.Event
+		if err := json.Unmarshal([]byte(data.String()), &result); err != nil {
+			return schema.Event{}, err
+		}
+		if result.Type == "" {
+			result.Type = eventType
+		}
+		return result, nil
+	}
 	for s.scanner.Scan() {
 		line := s.scanner.Text()
 		if line == "" {
-			if data.Len() == 0 {
+			result, err := flush()
+			if err == io.EOF {
 				continue
 			}
-			var result schema.Event
-			if err := json.Unmarshal([]byte(data.String()), &result); err != nil {
-				return schema.Event{}, err
-			}
-			if result.Type == "" {
-				result.Type = eventType
-			}
-			return result, nil
+			return result, err
+		}
+		if strings.HasPrefix(line, ":") {
+			continue
 		}
 		if strings.HasPrefix(line, "event:") {
 			eventType = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
@@ -351,7 +373,7 @@ func (s *EventStream) Next() (schema.Event, error) {
 	if err := s.scanner.Err(); err != nil {
 		return schema.Event{}, err
 	}
-	return schema.Event{}, io.EOF
+	return flush()
 }
 
 func (s *EventStream) Close() error {
@@ -396,6 +418,9 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 	if c == nil || strings.TrimSpace(c.baseURL) == "" {
 		return nil, errors.New("client base URL is empty")
 	}
+	if c.httpClient == nil {
+		c.httpClient = http.DefaultClient
+	}
 	var body io.Reader
 	if input != nil {
 		data, err := json.Marshal(input)
@@ -425,7 +450,7 @@ func (c *Client) do(ctx context.Context, method, path string, input, output any)
 		if message == "" {
 			message = response.Status
 		}
-		return nil, fmt.Errorf("server %s: %s", response.Status, message)
+		return nil, &APIError{Status: response.StatusCode, Message: fmt.Sprintf("server %s: %s", response.Status, message), RequestID: response.Header.Get("X-Request-ID")}
 	}
 	_ = output
 	return response, nil

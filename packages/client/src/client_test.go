@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -46,7 +48,7 @@ func TestClientUsesBearerAndDecodesTypedResources(t *testing.T) {
 func TestEventStreamDecodesSSEAndCloses(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte("event: message.text.delta\ndata: {\"type\":\"message.text.delta\",\"sequence\":2}\n\n"))
+		_, _ = w.Write([]byte(": keepalive\nevent: message.text.delta\ndata: {\"type\":\"message.text.delta\",\ndata: \"bad\"}\n\n"))
 	}))
 	defer server.Close()
 	api := New(server.URL, "")
@@ -56,7 +58,31 @@ func TestEventStreamDecodesSSEAndCloses(t *testing.T) {
 	}
 	defer stream.Close()
 	event, err := stream.Next()
-	if err != nil || event.Type != "message.text.delta" || event.Sequence != 2 {
+	if err == nil {
+		t.Fatalf("event = %#v, err=%v", event, err)
+	}
+	if err := stream.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stream.Next(); !errors.Is(err, io.EOF) {
+		t.Fatalf("closed stream err = %v", err)
+	}
+}
+
+func TestEventStreamDecodesCommentAndMultilineData(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(": keepalive\nevent: test\ndata: {\"type\":\"test\",\ndata: \"sequence\":3}\n\n"))
+	}))
+	defer server.Close()
+	api := New(server.URL, "")
+	stream, err := api.Events(context.Background(), "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	event, err := stream.Next()
+	if err != nil || event.Type != "test" || event.Sequence != 3 {
 		t.Fatalf("event = %#v, err=%v", event, err)
 	}
 	if _, err := stream.Next(); err == nil {

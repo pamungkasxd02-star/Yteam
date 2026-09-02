@@ -55,6 +55,8 @@ The Go foundation currently has working implementations and tests for:
   tools/list, tools/call, isolated status, and tool-registry integration;
 - typed client SDK with bearer authentication, session/lifecycle operations,
   provider resources, and replayable global/session SSE event streams;
+- typed client status/context/error contracts with standard SSE comment,
+  multiline-data, close, and EOF handling;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
