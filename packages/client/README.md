@@ -19,3 +19,7 @@ pending requests after a restart through the same question endpoints.
 
 Permission request/reply endpoints remain session-bound at the runtime layer;
 approval state is durable under the configured application home.
+
+`Run` reads the session's durable execution state, including `busy`,
+`retrying`, `completed`, `failed`, or `interrupted`, attempt count, error, and
+start/finish timestamps.

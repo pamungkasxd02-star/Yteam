@@ -69,6 +69,12 @@ func (c *Client) Messages(ctx context.Context, id string) ([]session.Message, er
 	return result, err
 }
 
+func (c *Client) Run(ctx context.Context, id string) (RunState, error) {
+	var result RunState
+	err := c.doJSON(ctx, http.MethodGet, sessionPath(id)+"/run", nil, &result)
+	return result, err
+}
+
 func (c *Client) Context(ctx context.Context, id string) (SessionContext, error) {
 	var result SessionContext
 	err := c.doJSON(ctx, http.MethodGet, sessionPath(id)+"/context", nil, &result)

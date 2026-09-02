@@ -77,6 +77,16 @@ func TestProviderUsageEndpoint(t *testing.T) {
 	}
 }
 
+func TestRunStateEndpoint(t *testing.T) {
+	s := testServer(t, "")
+	id := s.Runtime.CurrentSession().ID
+	r := httptest.NewRecorder()
+	s.Handler().ServeHTTP(r, httptest.NewRequest(http.MethodGet, "/api/session/"+id+"/run", nil))
+	if r.Code != http.StatusOK || !strings.Contains(r.Body.String(), `"session_id"`) || !strings.Contains(r.Body.String(), `"status"`) {
+		t.Fatalf("run = %d %s", r.Code, r.Body.String())
+	}
+}
+
 func TestSessionListAndExport(t *testing.T) {
 	s := testServer(t, "")
 	id := s.Runtime.CurrentSession().ID

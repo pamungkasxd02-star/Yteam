@@ -29,6 +29,15 @@ type Selection struct {
 	Current string `json:"current"`
 }
 
+type RunState struct {
+	SessionID  string `json:"session_id"`
+	Status     string `json:"status"`
+	Attempt    int    `json:"attempt"`
+	Error      string `json:"error"`
+	StartedAt  string `json:"started_at"`
+	FinishedAt string `json:"finished_at"`
+}
+
 type ProviderUsage struct {
 	Total   provider.UsageTotals            `json:"total"`
 	ByModel map[string]provider.UsageTotals `json:"by_model"`

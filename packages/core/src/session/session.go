@@ -78,7 +78,7 @@ func (s *Store) New() (*Session, error) {
 		return nil, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	sess := &Session{ID: "ses_" + hex.EncodeToString(buf), Title: "Sesi baru", Directory: s.directory, CreatedAt: now, UpdatedAt: now}
+	sess := &Session{ID: "ses_" + hex.EncodeToString(buf), Title: "Sesi baru", Directory: s.directory, CreatedAt: now, UpdatedAt: now, RunStatus: RunIdle}
 	return sess, s.writeMeta(sess)
 }
 

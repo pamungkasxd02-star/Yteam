@@ -12,6 +12,7 @@ import (
 
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/event"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/permission"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/question"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
 	"github.com/pamungkasxd02-star/Yteam/packages/schema/src"
@@ -190,6 +191,17 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(parts) == 1 && r.Method == http.MethodGet {
 		writeJSON(w, http.StatusOK, current)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "run" && r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"session_id":  current.ID,
+			"status":      current.RunStatus,
+			"attempt":     current.RunAttempt,
+			"error":       current.RunError,
+			"started_at":  current.RunStartedAt,
+			"finished_at": current.RunFinishedAt,
+		})
 		return
 	}
 	if len(parts) == 2 && parts[1] == "message" && r.Method == http.MethodGet {
@@ -555,5 +567,25 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 func writeError(w http.ResponseWriter, err error) {
-	writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	status := errorStatus(err)
+	writeJSON(w, status, map[string]any{"error": err.Error(), "status": status})
+}
+
+func errorStatus(err error) int {
+	if err == nil {
+		return http.StatusInternalServerError
+	}
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, session.ErrMessageNotFound) || errors.Is(err, question.ErrNotFound) {
+		return http.StatusNotFound
+	}
+	if errors.Is(err, permission.ErrDenied) || errors.Is(err, permission.ErrRejected) {
+		return http.StatusForbidden
+	}
+	message := strings.ToLower(err.Error())
+	for _, marker := range []string{"invalid ", "required", "empty", "must be", "unknown ", "unsupported "} {
+		if strings.Contains(message, marker) {
+			return http.StatusBadRequest
+		}
+	}
+	return http.StatusInternalServerError
 }

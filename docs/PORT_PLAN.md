@@ -69,6 +69,8 @@ The Go foundation currently has working implementations and tests for:
 - durable permission approvals with replayable pending/terminal state,
   reply-before-await handling, session-safe requests, and persisted `Always`
   rules;
+- server/client run-state contract with typed status mapping for missing,
+  forbidden, validation, and internal errors;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
