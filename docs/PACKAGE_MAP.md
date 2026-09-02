@@ -15,6 +15,6 @@ compatibility.
 | `tui` | Home/Session terminal foundation; full parity staged |
 | `server` | core HTTP API and SSE |
 | `opencode/src/mcp` | MCP stdio/remote transport, initialization, pagination, and startup config |
-| `opencode/src/lsp` | LSP JSON-RPC foundation |
+| `opencode/src/lsp` | LSP JSON-RPC lifecycle, reusable client selection, and advanced operations |
 | `skill` | `SKILL.md` discovery |
 | all other `packages/*` | boundary created; implementation staged |

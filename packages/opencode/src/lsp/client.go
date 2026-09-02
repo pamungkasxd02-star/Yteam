@@ -129,7 +129,10 @@ func readContentLength(reader *bufio.Reader) (int, error) {
 }
 func (c *Client) Initialize(ctx context.Context, rootURI string) error {
 	var result map[string]any
-	return c.Request(ctx, "initialize", map[string]any{"processId": nil, "rootUri": rootURI, "capabilities": map[string]any{}}, &result)
+	if err := c.Request(ctx, "initialize", map[string]any{"processId": nil, "rootUri": rootURI, "capabilities": map[string]any{}}, &result); err != nil {
+		return err
+	}
+	return c.Notify("initialized", map[string]any{})
 }
 func (c *Client) Shutdown(ctx context.Context) error { return c.Request(ctx, "shutdown", nil, nil) }
 func (c *Client) Close() error {
