@@ -217,6 +217,25 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, current.Revert)
 		return
 	}
+	if len(parts) == 2 && parts[1] == "snapshot" && r.Method == http.MethodPost {
+		saved, err := s.Runtime.CaptureSnapshot()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusCreated, saved.Manifest)
+		return
+	}
+	if len(parts) == 3 && parts[1] == "snapshot" && r.Method == http.MethodGet {
+		diff, err := s.Runtime.DiffSnapshot(parts[2])
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte(diff))
+		return
+	}
 	if len(parts) == 3 && parts[1] == "revert" && parts[2] == "stage" && r.Method == http.MethodPost {
 		var input struct {
 			MessageID string `json:"message_id"`

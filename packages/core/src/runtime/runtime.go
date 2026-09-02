@@ -15,6 +15,7 @@ import (
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/question"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session/runner"
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/snapshot"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/tool"
 	"github.com/pamungkasxd02-star/Yteam/packages/schema/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/skill/src"
@@ -39,6 +40,7 @@ type Runtime struct {
 	LSPExecute   func(context.Context, any) (any, error)
 	Inputs       *session.InputQueue
 	Questions    *question.Manager
+	Snapshot     *snapshot.Service
 	runMu        sync.Mutex
 	cancelRuns   map[string]context.CancelFunc
 }
@@ -49,6 +51,12 @@ func New(cfg config.Config, root string, store *session.Store, current *session.
 		{Action: "list", Resource: "*", Effect: permission.Allow},
 	})
 	questions := question.NewManager()
+	snapshots, err := snapshot.New(cfg.Home, root)
+	if err != nil {
+		// Runtime construction historically had no error return. Keep the
+		// constructor total and let revert report the missing service clearly.
+		snapshots = nil
+	}
 	tools := tool.Builtins(permissions)
 	tools.Add(tool.Question{Manager: questionsAdapter{manager: questions}})
 	return &Runtime{
@@ -65,6 +73,7 @@ func New(cfg config.Config, root string, store *session.Store, current *session.
 		Inputs:      store.Inputs(),
 		cancelRuns:  map[string]context.CancelFunc{},
 		Questions:   questions,
+		Snapshot:    snapshots,
 	}
 }
 
@@ -443,23 +452,65 @@ func (r *Runtime) CompactSession(summary string, keep int) (*session.Compaction,
 
 func (r *Runtime) StageRevert(messageID, diff string) (*session.Session, error) {
 	current := r.CurrentSession()
-	next, err := r.Store.StageRevert(current.ID, messageID, diff)
+	stored, err := r.Store.Load(current.ID)
+	if err != nil {
+		return nil, err
+	}
+	snapshotID := ""
+	found := false
+	for _, message := range stored.Messages {
+		if message.ID == messageID {
+			found = true
+			snapshotID = message.SnapshotID
+			break
+		}
+	}
+	if !found {
+		return nil, session.ErrMessageNotFound
+	}
+	if diff == "" && snapshotID != "" && r.Snapshot != nil {
+		if generated, err := r.Snapshot.Diff(snapshotID); err == nil {
+			diff = generated
+		}
+	}
+	next, err := r.Store.StageRevertWithSnapshot(current.ID, messageID, diff, snapshotID)
 	if err != nil {
 		return nil, err
 	}
 	r.SwitchSession(next)
 	if r.Events != nil {
-		_, _ = r.Events.Publish(context.Background(), schema.EventRevertStaged, current.ID, map[string]any{"message_id": messageID, "diff": diff})
+		_, _ = r.Events.Publish(context.Background(), schema.EventRevertStaged, current.ID, map[string]any{"message_id": messageID, "diff": diff, "snapshot_id": snapshotID})
 	}
 	return next, nil
 }
+
+func (r *Runtime) CaptureSnapshot() (*snapshot.Snapshot, error) {
+	if r.Snapshot == nil {
+		return nil, fmt.Errorf("snapshot service is not configured")
+	}
+	return r.Snapshot.Capture()
+}
+
+func (r *Runtime) DiffSnapshot(id string) (string, error) {
+	if r.Snapshot == nil {
+		return "", fmt.Errorf("snapshot service is not configured")
+	}
+	return r.Snapshot.Diff(id)
+}
 func (r *Runtime) ClearRevert() (*session.Session, error) {
 	current := r.CurrentSession()
+	oldSnapshot := ""
+	if current.Revert != nil {
+		oldSnapshot = current.Revert.Snapshot
+	}
 	next, err := r.Store.ClearRevert(current.ID)
 	if err != nil {
 		return nil, err
 	}
 	r.SwitchSession(next)
+	if oldSnapshot != "" && r.Snapshot != nil {
+		_ = r.Snapshot.Remove(oldSnapshot)
+	}
 	if r.Events != nil {
 		_, _ = r.Events.Publish(context.Background(), schema.EventRevertCleared, current.ID, nil)
 	}
@@ -468,14 +519,27 @@ func (r *Runtime) ClearRevert() (*session.Session, error) {
 func (r *Runtime) CommitRevert() (*session.Session, error) {
 	current := r.CurrentSession()
 	messageID := ""
+	snapshotID := ""
 	if current.Revert != nil {
 		messageID = current.Revert.MessageID
+		snapshotID = current.Revert.Snapshot
+	}
+	if snapshotID != "" {
+		if r.Snapshot == nil {
+			return nil, fmt.Errorf("snapshot service is not configured")
+		}
+		if err := r.Snapshot.Restore(snapshotID); err != nil {
+			return nil, err
+		}
 	}
 	next, err := r.Store.CommitRevert(current.ID)
 	if err != nil {
 		return nil, err
 	}
 	r.SwitchSession(next)
+	if snapshotID != "" && r.Snapshot != nil {
+		_ = r.Snapshot.Remove(snapshotID)
+	}
 	if r.Events != nil {
 		_, _ = r.Events.Publish(context.Background(), schema.EventRevertCommitted, current.ID, map[string]any{"message_id": messageID})
 	}
@@ -598,18 +662,34 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 	if current == nil {
 		return fmt.Errorf("session is not initialized")
 	}
+	user := session.Message{ID: session.NewMessageID(), Role: "user", Content: text}
+	if r.Snapshot != nil {
+		saved, err := r.Snapshot.Capture()
+		if err != nil {
+			return err
+		}
+		user.SnapshotID = saved.Manifest.ID
+	}
 	if r.Inputs == nil {
 		r.Inputs = session.NewInputQueue()
 	}
 	input, err := r.AdmitInput(current.ID, text, delivery)
 	if err != nil {
+		if user.SnapshotID != "" && r.Snapshot != nil {
+			_ = r.Snapshot.Remove(user.SnapshotID)
+		}
 		return err
 	}
 	if _, _, err := r.Inputs.PromoteByID(input.ID); err != nil {
+		if user.SnapshotID != "" && r.Snapshot != nil {
+			_ = r.Snapshot.Remove(user.SnapshotID)
+		}
 		return err
 	}
-	user := session.Message{ID: session.NewMessageID(), Role: "user", Content: text}
 	if err := r.Store.Append(current.ID, user); err != nil {
+		if user.SnapshotID != "" && r.Snapshot != nil {
+			_ = r.Snapshot.Remove(user.SnapshotID)
+		}
 		return err
 	}
 	current.Messages = append(current.Messages, user)

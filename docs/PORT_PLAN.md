@@ -34,6 +34,8 @@ The Go foundation currently has working implementations and tests for:
 - durable sessions with rename, fork, delete, compact, and export;
 - retry helper for transient provider failures and session compaction/revert
   lifecycle metadata;
+- portable project snapshots with deterministic file diffs, checksums, safe
+  restore, and rollback-on-failure wired into revert commit;
 - event journal with aggregate sequences and session replay;
 - permission allow/deny/ask plus once/always/reject waiting;
 - project-safe read/list/glob/grep/write/edit/bash tools;
@@ -52,10 +54,13 @@ The Go foundation currently has working implementations and tests for:
 Full UI parity and every OpenCode integration are still future layers. A
 package directory or README is not counted as a completed implementation.
 
-Revert currently preserves the OpenCode state contract and lifecycle endpoints
-(`stage`, `clear`, `commit`). Actual file restoration requires the separate
-OpenCode Snapshot service and is intentionally not represented as a fake
-implementation.
+Revert preserves the OpenCode state contract and lifecycle endpoints (`stage`,
+`clear`, `commit`). The Go port now includes a portable Snapshot service under
+`packages/core/src/snapshot`: it captures project files outside the project
+tree, excludes `.git`, computes deterministic status output, validates
+manifests/checksums, and restores the pre-prompt tree on commit. Snapshots are
+stored below the configured application home and never use machine-specific
+paths from source or documentation.
 
 ## Explicit non-goals
 

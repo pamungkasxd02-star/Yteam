@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -111,6 +113,37 @@ func TestCompactAndRevertEndpoints(t *testing.T) {
 	handler.ServeHTTP(r, req)
 	if r.Code != http.StatusOK || !strings.Contains(r.Body.String(), "keep this") {
 		t.Fatalf("compact = %d %s", r.Code, r.Body.String())
+	}
+}
+
+func TestSnapshotEndpoints(t *testing.T) {
+	s := testServer(t, "")
+	id := s.Runtime.CurrentSession().ID
+	path := filepath.Join(s.Runtime.Root, "snapshot.txt")
+	if err := os.WriteFile(path, []byte("before\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	handler := s.Handler()
+	r := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/session/"+id+"/snapshot", nil)
+	handler.ServeHTTP(r, req)
+	if r.Code != http.StatusCreated {
+		t.Fatalf("snapshot = %d %s", r.Code, r.Body.String())
+	}
+	var manifest struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(r.Body.Bytes(), &manifest); err != nil || manifest.ID == "" {
+		t.Fatalf("manifest = %s, err=%v", r.Body.String(), err)
+	}
+	if err := os.WriteFile(path, []byte("after\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/session/"+id+"/snapshot/"+manifest.ID, nil)
+	handler.ServeHTTP(r, req)
+	if r.Code != http.StatusOK || r.Body.String() != "M snapshot.txt\n" {
+		t.Fatalf("snapshot diff = %d %q", r.Code, r.Body.String())
 	}
 }
 

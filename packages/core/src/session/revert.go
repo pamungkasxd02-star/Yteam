@@ -8,6 +8,10 @@ import (
 var ErrMessageNotFound = errors.New("session message not found")
 
 func (s *Store) StageRevert(id, messageID, diff string) (*Session, error) {
+	return s.StageRevertWithSnapshot(id, messageID, diff, "")
+}
+
+func (s *Store) StageRevertWithSnapshot(id, messageID, diff, snapshotID string) (*Session, error) {
 	if err := validID(id); err != nil {
 		return nil, err
 	}
@@ -28,7 +32,7 @@ func (s *Store) StageRevert(id, messageID, diff string) (*Session, error) {
 	if !found {
 		return nil, ErrMessageNotFound
 	}
-	sess.Revert = &RevertState{MessageID: messageID, Diff: diff}
+	sess.Revert = &RevertState{MessageID: messageID, Diff: diff, Snapshot: snapshotID}
 	sess.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	if err := s.writeMeta(sess); err != nil {
 		return nil, err

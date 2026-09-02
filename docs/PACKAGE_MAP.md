@@ -8,6 +8,7 @@ compatibility.
 | --- | --- |
 | `opencode` | foundation executable |
 | `core` | foundation runtime |
+| `core/src/snapshot` | portable project capture/diff/restore service |
 | `agent` | built-in build/plan catalog |
 | `protocol` | foundation contracts |
 | `schema` | foundation data types |

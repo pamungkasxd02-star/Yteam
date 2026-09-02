@@ -23,6 +23,7 @@ type Message struct {
 	Name       string            `json:"name,omitempty"`
 	ToolCallID string            `json:"tool_call_id,omitempty"`
 	ToolCalls  []schema.ToolCall `json:"tool_calls,omitempty"`
+	SnapshotID string            `json:"snapshot_id,omitempty"`
 	CreatedAt  string            `json:"created_at"`
 }
 type Session struct {
