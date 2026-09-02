@@ -27,6 +27,10 @@ const (
 	KeyPageUp
 	KeyPageDown
 	KeyPaste
+	KeyWordLeft
+	KeyWordRight
+	KeyDeleteWordBackward
+	KeyDeleteWordForward
 )
 
 type Key struct {
@@ -69,6 +73,10 @@ func (r *KeyReader) ReadKey() (Key, error) {
 	if data[0] == 16 {
 		r.pending = data[1:]
 		return Key{Kind: KeyCtrlP}, nil
+	}
+	if data[0] == 23 {
+		r.pending = data[1:]
+		return Key{Kind: KeyDeleteWordBackward}, nil
 	}
 	if data[0] == 27 {
 		if len(data) < 2 {
@@ -167,6 +175,12 @@ func (r *KeyReader) csi(data []byte) (Key, error) {
 				return Key{Kind: KeyPageUp}, nil
 			case "6~":
 				return Key{Kind: KeyPageDown}, nil
+			case "1;3D", "1;5D", "5D":
+				return Key{Kind: KeyWordLeft}, nil
+			case "1;3C", "1;5C", "5C":
+				return Key{Kind: KeyWordRight}, nil
+			case "3;3~", "3;5~":
+				return Key{Kind: KeyDeleteWordForward}, nil
 			}
 			return Key{Kind: KeyEscape}, nil
 		}

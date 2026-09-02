@@ -64,3 +64,22 @@ func TestSplitEditorCommandRejectsUnterminatedQuotes(t *testing.T) {
 		t.Fatal("expected unterminated quote error")
 	}
 }
+
+func TestEditorWordMovementAndDeletion(t *testing.T) {
+	e := NewEditor()
+	e.Set("one two three")
+	e.WordLeft()
+	if e.Cursor() != len([]rune("one two ")) {
+		t.Fatalf("word left cursor = %d", e.Cursor())
+	}
+	e.DeleteWordBackward()
+	if e.String() != "one three" {
+		t.Fatalf("backward delete = %q", e.String())
+	}
+	e.Set("one two three")
+	e.Home()
+	e.DeleteWordForward()
+	if e.String() != " two three" {
+		t.Fatalf("forward delete = %q", e.String())
+	}
+}

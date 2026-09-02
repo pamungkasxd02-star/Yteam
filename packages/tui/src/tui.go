@@ -320,6 +320,26 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
+		case KeyWordLeft:
+			ui.editor.WordLeft()
+			ui.promptParts = nil
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
+		case KeyWordRight:
+			ui.editor.WordRight()
+			ui.promptParts = nil
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
+		case KeyDeleteWordBackward:
+			ui.editor.DeleteWordBackward()
+			ui.promptParts = nil
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
+		case KeyDeleteWordForward:
+			ui.editor.DeleteWordForward()
+			ui.promptParts = nil
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
 		case KeyHome:
 			ui.editor.Home()
 			ui.promptParts = nil

@@ -48,6 +48,41 @@ func (e *Editor) Delete() {
 	end := nextClusterEnd(e.value, e.cursor)
 	e.value = append(e.value[:e.cursor], e.value[end:]...)
 }
+
+func (e *Editor) WordLeft() {
+	for e.cursor > 0 && isEditorSpace(e.value[e.cursor-1]) {
+		e.cursor = previousClusterStart(e.value, e.cursor)
+	}
+	for e.cursor > 0 && !isEditorSpace(e.value[e.cursor-1]) {
+		e.cursor = previousClusterStart(e.value, e.cursor)
+	}
+}
+
+func (e *Editor) WordRight() {
+	for e.cursor < len(e.value) && isEditorSpace(e.value[e.cursor]) {
+		e.cursor = nextClusterEnd(e.value, e.cursor)
+	}
+	for e.cursor < len(e.value) && !isEditorSpace(e.value[e.cursor]) {
+		e.cursor = nextClusterEnd(e.value, e.cursor)
+	}
+}
+
+func (e *Editor) DeleteWordBackward() {
+	end := e.cursor
+	e.WordLeft()
+	e.value = append(e.value[:e.cursor], e.value[end:]...)
+}
+
+func (e *Editor) DeleteWordForward() {
+	start := e.cursor
+	e.WordRight()
+	e.value = append(e.value[:start], e.value[e.cursor:]...)
+	e.cursor = start
+}
+
+func isEditorSpace(value rune) bool {
+	return value == ' ' || value == '\t' || value == '\n' || value == '\r'
+}
 func (e *Editor) Left() {
 	if e.cursor > 0 {
 		e.cursor = previousClusterStart(e.value, e.cursor)

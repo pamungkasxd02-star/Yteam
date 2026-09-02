@@ -83,3 +83,13 @@ func TestKeyReaderDecodesBracketedPaste(t *testing.T) {
 		t.Fatalf("after paste = %#v, %v", key, err)
 	}
 }
+
+func TestKeyReaderDecodesWordKeys(t *testing.T) {
+	reader := NewKeyReader(strings.NewReader("\x1b[1;5D\x1b[1;3C\x17\x1b[3;5~"))
+	for index, expected := range []KeyKind{KeyWordLeft, KeyWordRight, KeyDeleteWordBackward, KeyDeleteWordForward} {
+		key, err := reader.ReadKey()
+		if err != nil || key.Kind != expected {
+			t.Fatalf("key %d = %#v, %v; want %d", index, key, err, expected)
+		}
+	}
+}
