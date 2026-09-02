@@ -111,3 +111,32 @@ func TestTUIHandlesCoreLocalCommandsWithoutProvider(t *testing.T) {
 		t.Fatalf("help handled=%v err=%v output=%q", handled, err, output.String())
 	}
 }
+
+func TestTUIPaletteUsesCanonicalCommandItems(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	store, err := session.Open(home, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := runtime.New(config.Config{Home: home, Model: "test"}, root, store, current, provider.New("http://127.0.0.1:1", ""))
+	ui := New(app, bytes.NewBuffer(nil), &bytes.Buffer{})
+	handled, err := ui.command(context.Background(), "/palette")
+	if !handled || err != nil || ui.picker == nil || ui.pickerKind != "command" {
+		t.Fatalf("palette handled=%v err=%v picker=%#v kind=%q", handled, err, ui.picker, ui.pickerKind)
+	}
+	ui.picker.SetQuery("/status")
+	item, ok := ui.picker.Selected()
+	if !ok || item.ID != "/status" {
+		t.Fatalf("palette selection = %#v, %v", item, ok)
+	}
+	if err := ui.selectPicker(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if ui.picker != nil {
+		t.Fatal("palette picker was not closed")
+	}
+}

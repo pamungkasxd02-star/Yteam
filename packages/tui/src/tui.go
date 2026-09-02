@@ -54,6 +54,7 @@ type UI struct {
 	questionText  map[int]string
 	questionMode  bool
 	questionDone  bool
+	exitRequested bool
 }
 
 func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
@@ -102,6 +103,9 @@ func (ui *UI) Run(ctx context.Context) error {
 		if ui.picker != nil {
 			if err := ui.handlePickerLine(ctx, line); err != nil {
 				fmt.Fprintln(ui.out, "error:", err)
+			}
+			if ui.exitRequested {
+				return nil
 			}
 			ui.draw()
 			continue
@@ -219,6 +223,9 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 		if ui.picker != nil {
 			if err := ui.handlePickerKey(ctx, key); err != nil {
 				fmt.Fprintln(ui.out, "error:", err)
+			}
+			if ui.exitRequested {
+				return nil
 			}
 			ui.draw()
 			continue
@@ -766,9 +773,9 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 		}
 		return true, nil
 	case "/palette":
-		ui.palette = true
-		ui.paletteQuery = ""
-		ui.selected = 0
+		items := make([]PickerItem, 0, len(ui.autocomplete.Commands))
+		items = append(items, ui.autocomplete.Commands...)
+		ui.picker, ui.pickerKind = NewPicker("Command palette", items), "command"
 		return true, nil
 	case "/models":
 		models, err := ui.app.Models(ctx)
@@ -891,7 +898,7 @@ func (ui *UI) handlePickerLine(ctx context.Context, line string) error {
 	return nil
 }
 
-func (ui *UI) selectPicker(_ context.Context) error {
+func (ui *UI) selectPicker(ctx context.Context) error {
 	item, ok := ui.picker.Selected()
 	if !ok {
 		return fmt.Errorf("no picker result selected")
@@ -920,6 +927,13 @@ func (ui *UI) selectPicker(_ context.Context) error {
 		ui.route = RouteSession
 		ui.transcript = next.Messages
 		ui.reducer.Hydrate(next.Messages)
+	case "command":
+		if commandpkg.Canonical(item.ID) == "exit" {
+			ui.exitRequested = true
+			return nil
+		}
+		_, err := ui.command(ctx, item.ID)
+		return err
 	}
 	return nil
 }
