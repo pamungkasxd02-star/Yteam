@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -112,20 +111,23 @@ func main() {
 	}
 	message := strings.TrimSpace(strings.Join(flag.Args(), " "))
 	if message != "" {
+		if strings.HasPrefix(message, "/") {
+			handled, commandErr := app.Command(context.Background(), message, os.Stdout)
+			if handled {
+				if commandErr != nil {
+					fail(commandErr)
+				}
+				return
+			}
+		}
 		if err := app.Prompt(context.Background(), message, os.Stdout); err != nil {
 			fail(err)
 		}
 		return
 	}
 	if !terminal(os.Stdin) {
-		data, err := io.ReadAll(os.Stdin)
-		if err != nil {
+		if err := tui.New(app, os.Stdin, os.Stdout).Run(context.Background()); err != nil {
 			fail(err)
-		}
-		if strings.TrimSpace(string(data)) != "" {
-			if err := app.Prompt(context.Background(), string(data), os.Stdout); err != nil {
-				fail(err)
-			}
 		}
 		return
 	}

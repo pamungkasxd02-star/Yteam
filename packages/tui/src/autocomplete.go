@@ -16,12 +16,13 @@ const (
 )
 
 type Autocomplete struct {
-	Kind    AutocompleteKind
-	Query   string
-	Start   int
-	Items   []PickerItem
-	Index   int
-	Visible bool
+	Kind     AutocompleteKind
+	Query    string
+	Start    int
+	Items    []PickerItem
+	Index    int
+	Visible  bool
+	Commands []PickerItem
 }
 
 func NewAutocomplete() *Autocomplete { return &Autocomplete{} }
@@ -61,7 +62,10 @@ func (a *Autocomplete) Refresh(value string, cursor int, root string) {
 
 func (a *Autocomplete) options(kind AutocompleteKind, query, root string) []PickerItem {
 	if kind == AutocompleteCommand {
-		commands := []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Choose a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/exit", Label: "/exit", Description: "Exit YTEAM"}}
+		commands := append([]PickerItem(nil), a.Commands...)
+		if len(commands) == 0 {
+			commands = []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Choose a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/exit", Label: "/exit", Description: "Exit YTEAM"}}
+		}
 		return filterAutocomplete(commands, query)
 	}
 	if root == "" {

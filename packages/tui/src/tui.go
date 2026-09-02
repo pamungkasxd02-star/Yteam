@@ -39,6 +39,8 @@ type UI struct {
 	reducer      *TranscriptReducer
 	redraw       chan struct{}
 	autocomplete *Autocomplete
+	promptBusy   bool
+	promptDone   chan error
 	questionID   string
 	questionAt   int
 	questionSet  map[int]map[int]bool
@@ -51,7 +53,23 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	reducer := NewTranscriptReducer()
 	current := app.CurrentSession()
 	reducer.Hydrate(current.Messages)
-	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: NewAutocomplete(), questionSet: map[int]map[int]bool{}, questionText: map[int]string{}}
+	autocomplete := NewAutocomplete()
+	for _, item := range app.CommandList() {
+		autocomplete.Commands = append(autocomplete.Commands, PickerItem{ID: "/" + item.Name, Label: "/" + item.Name, Description: item.Description})
+	}
+	for _, item := range []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Choose a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/exit", Label: "/exit", Description: "Exit YTEAM"}} {
+		found := false
+		for _, existing := range autocomplete.Commands {
+			if existing.ID == item.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			autocomplete.Commands = append(autocomplete.Commands, item)
+		}
+	}
+	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1)}
 }
 
 func (ui *UI) Run(ctx context.Context) error {
@@ -65,8 +83,8 @@ func (ui *UI) Run(ctx context.Context) error {
 		if !scanner.Scan() {
 			return scanner.Err()
 		}
-		line := scanner.Text()
-		if line == "\x03" || strings.TrimSpace(line) == "/exit" {
+		line := normalizeLine(scanner.Text())
+		if line == "\x03" || strings.TrimSpace(line) == "/exit" || strings.TrimSpace(line) == "/quit" {
 			return nil
 		}
 		if ui.picker != nil {
@@ -132,7 +150,7 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 		key Key
 		err error
 	}
-	keyCh := make(chan keyResult)
+	keyCh := make(chan keyResult, 1)
 	go func() {
 		for {
 			key, err := keys.ReadKey()
@@ -153,10 +171,19 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 		case <-ui.redraw:
 			ui.draw()
 			continue
+		case err := <-ui.promptDone:
+			ui.promptBusy = false
+			if err != nil {
+				fmt.Fprintln(ui.out, "error:", err)
+			}
+			ui.transcript = ui.app.CurrentSession().Messages
+			ui.draw()
+			continue
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 		if key.Kind == KeyCtrlC {
+			ui.app.InterruptSession(ui.app.CurrentSession().ID)
 			return nil
 		}
 		if ui.picker != nil {
@@ -192,14 +219,34 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				ui.draw()
 				continue
 			}
-			text := strings.TrimSpace(ui.editor.String())
+			content := normalizePromptContent(ui.editor.String())
+			text := strings.TrimSpace(content)
 			if text == "" {
 				ui.draw()
 				continue
 			}
-			ui.editor.AddHistory(ui.editor.String())
+			if ui.promptBusy {
+				fmt.Fprintln(ui.out, "\nRun masih berjalan. Tekan Ctrl+C untuk membatalkan.")
+				ui.draw()
+				continue
+			}
+			ui.editor.AddHistory(content)
 			ui.editor.Reset()
 			if strings.HasPrefix(text, "/") {
+				if ui.isPromptCommand(text) {
+					ui.route = RouteSession
+					ui.promptBusy = true
+					go func() {
+						_, err := ui.app.Command(ctx, text, ui)
+						ui.promptDone <- err
+					}()
+					ui.draw()
+					continue
+				}
+				if text == "/exit" || text == "/quit" {
+					ui.app.InterruptSession(ui.app.CurrentSession().ID)
+					return nil
+				}
 				handled, commandErr := ui.command(ctx, text)
 				if handled {
 					if commandErr != nil {
@@ -211,10 +258,10 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				}
 			}
 			ui.route = RouteSession
-			if err := ui.app.Prompt(ctx, text, ui.out); err != nil {
-				fmt.Fprintln(ui.out, "error:", err)
-			}
-			ui.transcript = ui.app.CurrentSession().Messages
+			ui.promptBusy = true
+			go func() {
+				ui.promptDone <- ui.app.Prompt(ctx, content, ui)
+			}()
 		case KeyBackspace:
 			ui.editor.Backspace()
 			ui.refreshAutocomplete()
@@ -274,6 +321,15 @@ func (ui *UI) refreshAutocomplete() {
 		return
 	}
 	ui.autocomplete.Refresh(ui.editor.String(), ui.editor.Cursor(), ui.app.Root)
+}
+
+func (ui *UI) isPromptCommand(text string) bool {
+	parts := strings.Fields(text)
+	if len(parts) == 0 || !strings.HasPrefix(parts[0], "/") {
+		return false
+	}
+	_, ok := ui.app.Commands[strings.TrimPrefix(parts[0], "/")]
+	return ok
 }
 
 func (ui *UI) handleQuestionKey(ctx context.Context, key Key) bool {
@@ -583,7 +639,7 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 		}
 		return true, ui.app.RenameSession(strings.TrimSpace(strings.TrimPrefix(line, parts[0])))
 	default:
-		return false, nil
+		return ui.app.Command(ctx, line, ui.out)
 	}
 }
 
@@ -733,7 +789,33 @@ func (ui *UI) draw() {
 	}
 }
 
+func (ui *UI) Write(data []byte) (int, error) {
+	ui.mu.Lock()
+	defer ui.mu.Unlock()
+	return ui.out.Write(data)
+}
+
 func IsTerminal(file *os.File) bool {
 	info, err := file.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func normalizeLine(value string) string {
+	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(value), "\ufeff"))
+}
+
+func normalizePromptContent(content string) string {
+	if strings.HasSuffix(content, "\r\n") {
+		body := content[:len(content)-2]
+		if !strings.ContainsAny(body, "\n\r") {
+			return body
+		}
+	}
+	if strings.HasSuffix(content, "\n") {
+		body := content[:len(content)-1]
+		if !strings.ContainsAny(body, "\n\r") {
+			return body
+		}
+	}
+	return content
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/config"
@@ -89,5 +90,24 @@ func TestQuestionPromptIsRendered(t *testing.T) {
 		if !bytes.Contains(output.Bytes(), []byte(expected)) {
 			t.Fatalf("missing %q in %s", expected, output.String())
 		}
+	}
+}
+
+func TestTUIHandlesCoreLocalCommandsWithoutProvider(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	store, err := session.Open(home, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := runtime.New(config.Config{Home: home, Model: "test"}, root, store, current, provider.New("http://127.0.0.1:1", ""))
+	var output bytes.Buffer
+	ui := New(app, bytes.NewBuffer(nil), &output)
+	handled, err := ui.command(context.Background(), "/help")
+	if !handled || err != nil || !bytes.Contains(output.Bytes(), []byte("Perintah YTEAM")) {
+		t.Fatalf("help handled=%v err=%v output=%q", handled, err, output.String())
 	}
 }

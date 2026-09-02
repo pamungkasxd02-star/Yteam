@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
 )
@@ -22,9 +21,12 @@ func Run(ctx context.Context, app *runtime.Runtime, in io.Reader, out io.Writer)
 		if !scanner.Scan() {
 			return scanner.Err()
 		}
-		line := strings.TrimSpace(scanner.Text())
+		line := normalizeLine(scanner.Text())
 		if line == "" {
 			continue
+		}
+		if line == "/exit" || line == "/quit" {
+			return nil
 		}
 		if handled, err := app.Command(ctx, line, out); handled {
 			if err != nil {
@@ -32,13 +34,8 @@ func Run(ctx context.Context, app *runtime.Runtime, in io.Reader, out io.Writer)
 			}
 			continue
 		}
-		switch line {
-		case "/exit", "/quit":
-			return nil
-		default:
-			if err := app.Prompt(ctx, line, out); err != nil {
-				fmt.Fprintln(out, "error:", err)
-			}
+		if err := app.Prompt(ctx, line, out); err != nil {
+			fmt.Fprintln(out, "error:", err)
 		}
 	}
 }
