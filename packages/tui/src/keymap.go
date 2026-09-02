@@ -26,6 +26,7 @@ const (
 	ActionExit               Action = "app.exit"
 	ActionEditor             Action = "prompt.editor"
 	ActionStash              Action = "prompt.stash"
+	ActionClear              Action = "prompt.clear"
 )
 
 type KeymapConfig struct {
@@ -53,6 +54,7 @@ func DefaultKeymap() *Keymap {
 		ActionExit:               "ctrl+c",
 		ActionEditor:             "ctrl+e",
 		ActionStash:              "none",
+		ActionClear:              "ctrl+c",
 	}}
 }
 
@@ -107,6 +109,13 @@ func (k *Keymap) Binding(action Action) string {
 	return k.bindings[action]
 }
 
+func (k *Keymap) Matches(action Action, key Key) bool {
+	if k == nil {
+		return false
+	}
+	return keyBindingMatches(key, k.Binding(action))
+}
+
 func (k *Keymap) Normalize(key Key) Key {
 	if k == nil {
 		return key
@@ -123,6 +132,7 @@ func (k *Keymap) Normalize(key Key) Key {
 		{ActionPageUp, KeyPageUp}, {ActionPageDown, KeyPageDown},
 		{ActionEditor, KeyOpenEditor},
 		{ActionStash, KeyStash},
+		{ActionClear, KeyClear},
 		{ActionExit, KeyCtrlC},
 	}
 	for _, item := range items {
@@ -167,6 +177,10 @@ func keyBindingMatches(key Key, binding string) bool {
 		return key.Kind == KeyCtrlE
 	case "ctrl+s":
 		return key.Kind == KeyStash
+	case "ctrl+c":
+		return key.Kind == KeyCtrlC
+	case "ctrl+l":
+		return key.Kind == KeyCtrlL
 	case "none":
 		return false
 	case "ctrl+q":

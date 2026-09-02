@@ -218,15 +218,8 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			}
 			continue
 		}
-		if key.Kind == KeyCtrlC {
-			ui.app.InterruptSession(ui.app.CurrentSession().ID)
-			return nil
-		}
+		rawKey := key
 		key = ui.keymap.Normalize(key)
-		if key.Kind == KeyCtrlC {
-			ui.app.InterruptSession(ui.app.CurrentSession().ID)
-			return nil
-		}
 		if ui.picker != nil {
 			if err := ui.handlePickerKey(ctx, key); err != nil {
 				fmt.Fprintln(ui.out, "error:", err)
@@ -240,6 +233,24 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 		if ui.handleQuestionKey(ctx, key) {
 			ui.draw()
 			continue
+		}
+		if key.Kind == KeyClear {
+			if ui.promptHasContent() {
+				if err := ui.clearPrompt(); err != nil {
+					fmt.Fprintln(ui.out, "clear error:", err)
+				}
+				ui.draw()
+				continue
+			}
+			if ui.keymap.Matches(ActionExit, rawKey) {
+				ui.app.InterruptSession(ui.app.CurrentSession().ID)
+				return nil
+			}
+			continue
+		}
+		if ui.keymap.Matches(ActionExit, rawKey) && rawKey.Kind == KeyCtrlC {
+			ui.app.InterruptSession(ui.app.CurrentSession().ID)
+			return nil
 		}
 		switch key.Kind {
 		case KeyStash:
@@ -577,6 +588,26 @@ func (ui *UI) resetPromptHistoryNavigation() {
 	if ui.promptHistory != nil {
 		ui.promptHistory.ResetNavigation()
 	}
+}
+
+func (ui *UI) promptHasContent() bool {
+	return !ui.editor.Empty() || len(ui.promptParts) > 0
+}
+
+func (ui *UI) clearPrompt() error {
+	content := ui.editor.String()
+	if ui.promptHistory != nil && (len(strings.TrimSpace(content)) >= 20 || len(ui.promptParts) > 0) {
+		if err := ui.promptHistory.Append(PromptEntry{Input: content, Mode: "normal", Parts: clonePromptParts(ui.promptParts)}); err != nil {
+			return err
+		}
+	}
+	ui.editor.Reset()
+	ui.promptParts = nil
+	if ui.autocomplete != nil {
+		ui.autocomplete.Close()
+	}
+	ui.resetPromptHistoryNavigation()
+	return nil
 }
 
 func (ui *UI) isPromptCommand(text string) bool {

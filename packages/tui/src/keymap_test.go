@@ -54,3 +54,24 @@ func TestPromptStashIsUnboundByDefaultLikeOpenCode(t *testing.T) {
 		t.Fatalf("default stash binding = %q, want none", got)
 	}
 }
+
+func TestPromptClearUsesCtrlCByDefault(t *testing.T) {
+	keymap := DefaultKeymap()
+	if keymap.Binding(ActionClear) != "ctrl+c" || !keymap.Matches(ActionClear, Key{Kind: KeyCtrlC}) {
+		t.Fatalf("clear binding does not match ctrl+c: %q", keymap.Binding(ActionClear))
+	}
+}
+
+func TestPromptClearCanBeRemappedWithoutChangingExit(t *testing.T) {
+	keymap := DefaultKeymap()
+	keymap.bindings[ActionClear] = "ctrl+l"
+	if !keymap.Matches(ActionClear, Key{Kind: KeyCtrlL}) {
+		t.Fatal("configured clear key did not match")
+	}
+	if keymap.Matches(ActionClear, Key{Kind: KeyCtrlC}) {
+		t.Fatal("old clear key still matched after remap")
+	}
+	if !keymap.Matches(ActionExit, Key{Kind: KeyCtrlC}) {
+		t.Fatal("exit binding changed when clear was remapped")
+	}
+}
