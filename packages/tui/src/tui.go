@@ -401,7 +401,7 @@ func (ui *UI) isPromptCommand(text string) bool {
 
 func (ui *UI) openEditor(ctx context.Context, file *os.File, restore func(), value string) (string, func(), error) {
 	restore()
-	content, editorErr := openExternalEditor(ctx, value, ui.app.Root, file, ui.out, ui.out)
+	content, editorErr := openExternalEditor(ctx, value, ui.app.Root, ui.app.Config.Home, file, ui.out, ui.out)
 	newRestore, rawErr := enableRaw(file)
 	if editorErr != nil {
 		if rawErr != nil {

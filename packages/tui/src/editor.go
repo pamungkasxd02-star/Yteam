@@ -101,12 +101,18 @@ func (e *Editor) HistoryDown() bool {
 
 // openExternalEditor implements OpenCode's VISUAL/EDITOR prompt flow. The
 // caller owns terminal suspension/restoration around this operation.
-func openExternalEditor(ctx context.Context, value, cwd string, stdin io.Reader, stdout, stderr io.Writer) (string, error) {
+func openExternalEditor(ctx context.Context, value, cwd, tempDir string, stdin io.Reader, stdout, stderr io.Writer) (string, error) {
 	editor := firstNonEmpty(os.Getenv("VISUAL"), os.Getenv("EDITOR"))
 	if editor == "" {
 		return "", fmt.Errorf("VISUAL or EDITOR is not set")
 	}
-	temporary, err := os.CreateTemp("", "yteam-prompt-*.md")
+	if strings.TrimSpace(tempDir) == "" {
+		return "", fmt.Errorf("application home is not configured for editor temporary files")
+	}
+	if err := os.MkdirAll(tempDir, 0o700); err != nil {
+		return "", err
+	}
+	temporary, err := os.CreateTemp(tempDir, "yteam-prompt-*.md")
 	if err != nil {
 		return "", err
 	}
