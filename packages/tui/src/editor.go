@@ -83,6 +83,7 @@ func (e *Editor) DeleteWordForward() {
 func isEditorSpace(value rune) bool {
 	return value == ' ' || value == '\t' || value == '\n' || value == '\r'
 }
+
 func (e *Editor) Left() {
 	if e.cursor > 0 {
 		e.cursor = previousClusterStart(e.value, e.cursor)

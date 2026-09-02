@@ -43,6 +43,7 @@ type UI struct {
 	terminal      *os.File
 	viewport      *Viewport
 	autocomplete  *Autocomplete
+	keymap        *Keymap
 	promptBusy    bool
 	promptDone    chan error
 	promptHistory *PromptHistory
@@ -79,7 +80,8 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 		}
 	}
 	history, _ := OpenPromptHistory(app.Config.Home)
-	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1), promptHistory: history, viewport: NewViewport(80, 18)}
+	keymap, _ := LoadKeymap(app.Config.Home)
+	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, keymap: keymap, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1), promptHistory: history, viewport: NewViewport(80, 18)}
 }
 
 func (ui *UI) Run(ctx context.Context) error {
@@ -213,6 +215,7 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.app.InterruptSession(ui.app.CurrentSession().ID)
 			return nil
 		}
+		key = ui.keymap.Normalize(key)
 		if ui.picker != nil {
 			if err := ui.handlePickerKey(ctx, key); err != nil {
 				fmt.Fprintln(ui.out, "error:", err)
@@ -225,6 +228,18 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			continue
 		}
 		switch key.Kind {
+		case KeyOpenEditor:
+			value, editorErr := ui.openEditor(ctx, terminal, ui.editor.String())
+			if editorErr != nil {
+				fmt.Fprintln(ui.out, "editor error:", editorErr)
+			} else if value != "" {
+				ui.editor.Set(normalizePromptContent(value))
+			}
+		case KeyCtrlN:
+			ui.editor.Newline()
+			ui.promptParts = nil
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
 		case KeyText:
 			if ui.handlePermissionKey(key) {
 				continue
