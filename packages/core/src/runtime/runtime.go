@@ -80,6 +80,20 @@ func New(cfg config.Config, root string, store *session.Store, current *session.
 	for _, item := range commands {
 		commandMap[item.Name] = item
 	}
+	if discovered, skillErr := skill.Discover(root); skillErr == nil {
+		for _, item := range discovered {
+			if _, exists := commandMap[item.Name]; exists {
+				continue
+			}
+			commandMap[item.Name] = commandpkg.Info{
+				Name:        item.Name,
+				Description: item.Description,
+				Source:      commandpkg.SourceSkill,
+				Template:    item.Body,
+				Hints:       commandpkg.Hints(item.Body),
+			}
+		}
+	}
 	selectedAgent := firstAgent(cfg.Agent)
 	if current != nil && current.Agent != "" {
 		selectedAgent = firstAgent(current.Agent)
