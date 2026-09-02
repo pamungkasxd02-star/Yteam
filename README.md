@@ -6,7 +6,7 @@ written in Go instead of Bun/TypeScript.
 
 This repository is being ported in layers. The first layer is deliberately
 small and runnable: project discovery, configuration, durable sessions,
-OpenAI-compatible streaming, agent/tool execution, Indonesian CLI text, and an
+OpenAI-compatible streaming, agent/tool execution, English CLI text, and an
 interactive Home/Session terminal UI. Later layers will add full TUI parity,
 MCP/LSP integrations, server breadth, and plugin compatibility.
 
@@ -51,8 +51,9 @@ yteam
 ```
 
 Interactive commands include `/models`, `/model <id>`, `/agents`,
-`/agent <name>`, `/sessions`, `/new`, `/fork`, `/rename <title>`, and
-`/export [md|json]`.
+`/agent <name>`, `/sessions` (also `/resume` and `/continue`), `/new` (also
+`/clear`), `/fork`, `/rename <title>`, `/history`, `/skills`, `/mcps`,
+`/editor`, and `/export [md|json]`. Exit aliases are `/exit`, `/quit`, and `/q`.
 
 Use `-agent plan` or `YTEAM_AGENT=plan` to run the read-only planning agent;
 `build` remains the default and can use the full tool set.

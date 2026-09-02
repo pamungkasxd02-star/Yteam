@@ -107,7 +107,7 @@ func TestTUIHandlesCoreLocalCommandsWithoutProvider(t *testing.T) {
 	var output bytes.Buffer
 	ui := New(app, bytes.NewBuffer(nil), &output)
 	handled, err := ui.command(context.Background(), "/help")
-	if !handled || err != nil || !bytes.Contains(output.Bytes(), []byte("Perintah YTEAM")) {
+	if !handled || err != nil || !bytes.Contains(output.Bytes(), []byte("OpenCode commands")) {
 		t.Fatalf("help handled=%v err=%v output=%q", handled, err, output.String())
 	}
 }

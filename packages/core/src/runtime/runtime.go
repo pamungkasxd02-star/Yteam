@@ -704,22 +704,22 @@ func (r *Runtime) Command(ctx context.Context, input string, out io.Writer) (boo
 		}
 	case "/agent", "/agents":
 		if len(parts) < 2 {
-			fmt.Fprintln(out, "agent aktif:", r.AgentName(), "(build, plan)")
+			fmt.Fprintln(out, "active agent:", r.AgentName(), "(build, plan)")
 			return true, nil
 		}
 		if err := r.SetAgent(parts[1]); err != nil {
 			return true, err
 		}
-		fmt.Fprintln(out, "agent aktif:", r.AgentName())
+		fmt.Fprintln(out, "active agent:", r.AgentName())
 	case "/model":
 		if len(parts) < 2 {
-			fmt.Fprintln(out, "model aktif:", r.ModelName())
+			fmt.Fprintln(out, "active model:", r.ModelName())
 			return true, nil
 		}
 		if err := r.SetModel(parts[1]); err != nil {
 			return true, err
 		}
-		fmt.Fprintln(out, "model aktif:", r.ModelName())
+		fmt.Fprintln(out, "active model:", r.ModelName())
 	case "/clear", "/new":
 		next, err := r.NewSession()
 		if err != nil {
@@ -761,7 +761,7 @@ func (r *Runtime) Command(ctx context.Context, input string, out io.Writer) (boo
 		_, err = io.WriteString(out, data)
 		return true, err
 	default:
-		fmt.Fprintf(out, "Perintah tidak dikenal: %s\n", parts[0])
+		fmt.Fprintf(out, "Unknown command: %s\n", parts[0])
 	}
 	return true, nil
 }
@@ -949,13 +949,23 @@ func (r *Runtime) setRunState(ctx context.Context, current *session.Session, sta
 	_, _ = r.Events.Publish(ctx, typ, current.ID, map[string]any{"status": status, "attempt": attempt, "error": runErr})
 }
 func (r *Runtime) Help(out io.Writer) {
-	fmt.Fprintln(out, "Perintah YTEAM:")
-	fmt.Fprintln(out, "  /help       tampilkan bantuan")
-	fmt.Fprintln(out, "  /status     tampilkan status proyek")
-	fmt.Fprintln(out, "  /models     ambil daftar model")
-	fmt.Fprintln(out, "  /history    tampilkan riwayat")
-	fmt.Fprintln(out, "  /clear      buat session baru")
-	fmt.Fprintln(out, "  /exit       keluar")
+	fmt.Fprintln(out, "OpenCode commands:")
+	fmt.Fprintln(out, "  /help                  show help")
+	fmt.Fprintln(out, "  /status                show project and session status")
+	fmt.Fprintln(out, "  /models                list available models")
+	fmt.Fprintln(out, "  /model <id>            select a model")
+	fmt.Fprintln(out, "  /agents                list or select an agent")
+	fmt.Fprintln(out, "  /agent <name>          select an agent")
+	fmt.Fprintln(out, "  /sessions              switch session")
+	fmt.Fprintln(out, "  /resume, /continue     switch session")
+	fmt.Fprintln(out, "  /new, /clear           create a new session")
+	fmt.Fprintln(out, "  /fork                  fork the current session")
+	fmt.Fprintln(out, "  /rename <title>        rename the current session")
+	fmt.Fprintln(out, "  /export [md|json]      export the current session")
+	fmt.Fprintln(out, "  /history               show session history")
+	fmt.Fprintln(out, "  /skills                list discovered skills")
+	fmt.Fprintln(out, "  /mcps                  show MCP integration status")
+	fmt.Fprintln(out, "  /exit, /quit, /q       exit")
 }
 func (r *Runtime) Status(out io.Writer) {
 	fmt.Fprintf(out, "project: %s\nmodel: %s\nsession: %s\ntitle: %s\n", r.Root, r.Config.Model, r.Session.ID, r.Session.Title)
