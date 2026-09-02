@@ -94,6 +94,8 @@ func (r *TranscriptReducer) Apply(event schema.Event) {
 		r.Status = "waiting for answer"
 	case schema.EventQuestionReplied, schema.EventQuestionRejected:
 		r.Status = "running"
+	case schema.EventCompactionEnded:
+		r.Status = "compacted"
 	}
 }
 

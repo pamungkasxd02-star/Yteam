@@ -105,6 +105,10 @@ Session metadata records the current run lifecycle (`busy`, `retrying`,
 information. The same transitions are emitted as durable events for API/SSE
 clients and the terminal transcript reducer.
 
+Compaction stores a monotonically increasing context epoch plus provider-
+independent token estimates before and after summarization. The estimates are
+for budgeting and observability, not a replacement for a provider tokenizer.
+
 The verified portable build targets are Windows, Linux amd64, and macOS amd64.
 Use `go test -p 1 ./...` on constrained Windows/386 environments to avoid
 parallel compiler pagefile pressure.

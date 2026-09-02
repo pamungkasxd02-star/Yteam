@@ -490,7 +490,7 @@ func (r *Runtime) CompactSession(summary string, keep int) (*session.Compaction,
 	}
 	r.SwitchSession(next)
 	if r.Events != nil {
-		_, _ = r.Events.Publish(context.Background(), schema.EventCompactionEnded, current.ID, map[string]any{"summary": compaction.Summary})
+		_, _ = r.Events.Publish(context.Background(), schema.EventCompactionEnded, current.ID, map[string]any{"summary": compaction.Summary, "epoch": compaction.Epoch, "token_estimate_before": compaction.TokenEstimateBefore, "token_estimate_after": compaction.TokenEstimateAfter})
 	}
 	return compaction, nil
 }

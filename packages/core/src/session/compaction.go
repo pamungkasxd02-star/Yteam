@@ -13,9 +13,12 @@ const DefaultKeepMessages = 12
 const MaxToolOutput = 2000
 
 type Compaction struct {
-	Summary   string    `json:"summary"`
-	Recent    []Message `json:"recent"`
-	CreatedAt string    `json:"created_at"`
+	Summary             string    `json:"summary"`
+	Recent              []Message `json:"recent"`
+	CreatedAt           string    `json:"created_at"`
+	Epoch               uint64    `json:"epoch"`
+	TokenEstimateBefore int       `json:"token_estimate_before"`
+	TokenEstimateAfter  int       `json:"token_estimate_after"`
 }
 
 func (s *Store) CompactMessages(id, summary string, keep int) (*Compaction, error) {
@@ -39,11 +42,35 @@ func (s *Store) CompactMessages(id, summary string, keep int) (*Compaction, erro
 			recent[index].Content = recent[index].Content[:MaxToolOutput] + "\n[truncated]"
 		}
 	}
-	compaction := &Compaction{Summary: strings.TrimSpace(summary), Recent: recent, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano)}
-	if err := s.replaceMessages(id, []Message{{Role: "system", Content: "[context summary]\n" + compaction.Summary, CreatedAt: compaction.CreatedAt}}, recent); err != nil {
+	compaction := &Compaction{
+		Summary: strings.TrimSpace(summary), Recent: recent,
+		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Epoch: sess.ContextEpoch + 1,
+		TokenEstimateBefore: EstimateTokens(sess.Messages),
+	}
+	summaryMessage := Message{ID: NewMessageID(), Role: "system", Content: "[context summary]\n" + compaction.Summary, CreatedAt: compaction.CreatedAt}
+	compaction.TokenEstimateAfter = EstimateTokens(append([]Message{summaryMessage}, recent...))
+	if err := s.replaceMessages(id, []Message{summaryMessage}, recent); err != nil {
+		return nil, err
+	}
+	sess.ContextEpoch = compaction.Epoch
+	sess.UpdatedAt = compaction.CreatedAt
+	if err := s.writeMeta(sess); err != nil {
 		return nil, err
 	}
 	return compaction, nil
+}
+
+// EstimateTokens is a provider-independent lower-cost estimate used for
+// context budgeting. It intentionally avoids claiming exact tokenizer parity.
+func EstimateTokens(messages []Message) int {
+	total := 0
+	for _, message := range messages {
+		units := len([]rune(message.Content)) + len([]rune(message.Reasoning)) + len(message.ToolCalls)*8
+		if units > 0 {
+			total += (units + 3) / 4
+		}
+	}
+	return total
 }
 
 func (s *Store) replaceMessages(id string, messages ...[]Message) error {

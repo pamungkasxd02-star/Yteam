@@ -62,6 +62,8 @@ The Go foundation currently has working implementations and tests for:
 - durable per-session run lifecycle with `busy`, `retrying`, `completed`,
   `failed`, and `interrupted` state, timestamps, retry attempts, and terminal
   events consumed by TUI/server projections;
+- compaction context epochs with deterministic token estimates before/after
+  compaction, durable epoch persistence, and `context` API projection;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,

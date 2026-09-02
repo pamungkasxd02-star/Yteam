@@ -10,3 +10,6 @@ Typed responses include `Status`, `AgentState`, `Selection`, `ProviderUsage`,
 `IntegrationStatus`, `SessionContext`, and `APIError`. `EventStream` follows
 standard SSE framing, ignores comment/keepalive lines, supports multiline data,
 and can be safely closed or consumed until `io.EOF`.
+
+`SessionContext` also exposes the durable `ContextEpoch` and the current
+provider-independent `TokenEstimate` returned by the context endpoint.

@@ -197,7 +197,7 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(parts) == 2 && parts[1] == "context" && r.Method == http.MethodGet {
-		writeJSON(w, http.StatusOK, map[string]any{"session_id": current.ID, "messages": current.Messages})
+		writeJSON(w, http.StatusOK, map[string]any{"session_id": current.ID, "messages": current.Messages, "context_epoch": current.ContextEpoch, "token_estimate": session.EstimateTokens(current.Messages)})
 		return
 	}
 	if len(parts) == 2 && parts[1] == "compact" && r.Method == http.MethodPost {

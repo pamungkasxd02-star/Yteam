@@ -51,3 +51,11 @@ func TestTranscriptReducerAppliesRunLifecycle(t *testing.T) {
 		t.Fatalf("interrupted status = %q", reducer.Status)
 	}
 }
+
+func TestTranscriptReducerMarksCompaction(t *testing.T) {
+	reducer := NewTranscriptReducer()
+	reducer.Apply(schema.Event{Type: schema.EventCompactionEnded})
+	if reducer.Status != "compacted" {
+		t.Fatalf("status = %q", reducer.Status)
+	}
+}

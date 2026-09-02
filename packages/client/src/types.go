@@ -42,8 +42,10 @@ type IntegrationStatus struct {
 }
 
 type SessionContext struct {
-	SessionID string            `json:"session_id"`
-	Messages  []session.Message `json:"messages"`
+	SessionID     string            `json:"session_id"`
+	Messages      []session.Message `json:"messages"`
+	ContextEpoch  uint64            `json:"context_epoch,omitempty"`
+	TokenEstimate int               `json:"token_estimate,omitempty"`
 }
 
 type SessionHistory = SessionContext
