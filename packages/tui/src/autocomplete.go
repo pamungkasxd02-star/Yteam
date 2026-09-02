@@ -23,6 +23,7 @@ type Autocomplete struct {
 	Index    int
 	Visible  bool
 	Commands []PickerItem
+	Agents   []PickerItem
 }
 
 func NewAutocomplete() *Autocomplete { return &Autocomplete{} }
@@ -69,9 +70,9 @@ func (a *Autocomplete) options(kind AutocompleteKind, query, root string) []Pick
 		return filterAutocomplete(commands, query)
 	}
 	if root == "" {
-		return nil
+		return filterAutocomplete(a.Agents, query)
 	}
-	var items []PickerItem
+	items := append([]PickerItem(nil), a.Agents...)
 	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return nil

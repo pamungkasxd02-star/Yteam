@@ -68,6 +68,10 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	for _, item := range app.CommandList() {
 		autocomplete.Commands = append(autocomplete.Commands, PickerItem{ID: "/" + item.Name, Label: "/" + item.Name, Description: item.Description})
 	}
+	for _, item := range app.Agents() {
+		name := item["name"]
+		autocomplete.Agents = append(autocomplete.Agents, PickerItem{ID: name, Label: name, Description: item["description"]})
+	}
 	for _, item := range commandpkg.AliasItems() {
 		autocomplete.Commands = append(autocomplete.Commands, PickerItem{ID: item.ID, Label: item.Label, Description: item.Description})
 	}
@@ -555,10 +559,16 @@ func (ui *UI) acceptAutocomplete() {
 	if !ui.autocomplete.Accept(ui.editor) {
 		return
 	}
+	virtual := "@" + item.ID
+	for _, agent := range ui.autocomplete.Agents {
+		if agent.ID == item.ID {
+			ui.promptParts = append(ui.promptParts, schema.MessagePart{Type: "agent", Source: &schema.PromptPartSource{Type: "agent", Value: virtual, Start: start, End: start + len([]rune(virtual))}})
+			return
+		}
+	}
 	if kind != AutocompleteFile {
 		return
 	}
-	virtual := "@" + item.ID
 	ui.promptParts = append(ui.promptParts, schema.MessagePart{
 		Type:     "file",
 		Filename: item.ID,

@@ -64,3 +64,27 @@ func TestAutocompleteIncludesDiscoveredCommands(t *testing.T) {
 		t.Fatalf("command suggestion = %#v, ok=%v", item, ok)
 	}
 }
+
+func TestAutocompleteIncludesAgentsAndCreatesAgentPart(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	store, err := session.Open(home, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := runtime.New(config.Config{Home: home, Model: "test"}, root, store, current, provider.New("http://127.0.0.1:1", ""))
+	ui := New(app, bytes.NewBuffer(nil), &bytes.Buffer{})
+	ui.editor.Set("@bu")
+	ui.refreshAutocomplete()
+	item, ok := ui.autocomplete.Selected()
+	if !ok || item.ID != "build" {
+		t.Fatalf("agent suggestion = %#v, ok=%v", item, ok)
+	}
+	ui.acceptAutocomplete()
+	if ui.editor.String() != "@build " || len(ui.promptParts) != 1 || ui.promptParts[0].Type != "agent" {
+		t.Fatalf("agent part = editor=%q parts=%#v", ui.editor.String(), ui.promptParts)
+	}
+}
