@@ -15,6 +15,6 @@ Piped input uses the same command-first line loop, so `/help`, `/quit`, and
 The command surface follows OpenCode names where the corresponding Go runtime
 capability exists: `/models`, `/variants`, `/agents`, `/sessions`, `/resume`,
 `/continue`, `/new`, `/clear`, `/fork`, `/rename`, `/export`, `/history`,
-`/skills`, `/mcps`, `/lsp`, `/plugins`, `/usage`, `/editor`, and `/exit` with
+`/stash`, `/skills`, `/mcps`, `/lsp`, `/plugins`, `/usage`, `/editor`, and `/exit` with
 `/quit` and `/q` aliases. Features without a corresponding runtime service
 remain explicitly staged rather than being represented by no-op commands.

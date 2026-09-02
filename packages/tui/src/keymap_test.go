@@ -48,3 +48,9 @@ func TestKeymapCanRemapExit(t *testing.T) {
 		t.Fatalf("exit key = %d, want %d", got.Kind, KeyCtrlC)
 	}
 }
+
+func TestPromptStashIsUnboundByDefaultLikeOpenCode(t *testing.T) {
+	if got := DefaultKeymap().Binding(ActionStash); got != "none" {
+		t.Fatalf("default stash binding = %q, want none", got)
+	}
+}

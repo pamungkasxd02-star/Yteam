@@ -25,6 +25,7 @@ const (
 	ActionPageDown           Action = "messages.page_down"
 	ActionExit               Action = "app.exit"
 	ActionEditor             Action = "prompt.editor"
+	ActionStash              Action = "prompt.stash"
 )
 
 type KeymapConfig struct {
@@ -51,6 +52,7 @@ func DefaultKeymap() *Keymap {
 		ActionPageDown:           "pagedown",
 		ActionExit:               "ctrl+c",
 		ActionEditor:             "ctrl+e",
+		ActionStash:              "none",
 	}}
 }
 
@@ -120,6 +122,7 @@ func (k *Keymap) Normalize(key Key) Key {
 		{ActionHistoryPrevious, KeyUp}, {ActionHistoryNext, KeyDown},
 		{ActionPageUp, KeyPageUp}, {ActionPageDown, KeyPageDown},
 		{ActionEditor, KeyOpenEditor},
+		{ActionStash, KeyStash},
 		{ActionExit, KeyCtrlC},
 	}
 	for _, item := range items {
@@ -162,6 +165,10 @@ func keyBindingMatches(key Key, binding string) bool {
 		return key.Kind == KeyPageDown
 	case "ctrl+e":
 		return key.Kind == KeyCtrlE
+	case "ctrl+s":
+		return key.Kind == KeyStash
+	case "none":
+		return false
 	case "ctrl+q":
 		return key.Kind == KeyCtrlQ
 	}

@@ -1079,6 +1079,7 @@ func (r *Runtime) Help(out io.Writer) {
 	fmt.Fprintln(out, "  /rename <title>        rename the current session")
 	fmt.Fprintln(out, "  /export [md|json]      export the current session")
 	fmt.Fprintln(out, "  /history               show session history")
+	fmt.Fprintln(out, "  /stash [pop|list]      stash or restore a prompt")
 	fmt.Fprintln(out, "  /skills                list discovered skills")
 	fmt.Fprintln(out, "  /mcps                  show MCP integration status")
 	fmt.Fprintln(out, "  /lsp                   show LSP integration status")

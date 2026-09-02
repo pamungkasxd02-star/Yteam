@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	commandpkg "github.com/pamungkasxd02-star/Yteam/packages/command/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/permission"
@@ -48,6 +49,7 @@ type UI struct {
 	promptDone    chan error
 	promptHistory *PromptHistory
 	promptParts   []schema.MessagePart
+	promptStash   *PromptStash
 	questionID    string
 	questionAt    int
 	questionSet   map[int]map[int]bool
@@ -68,7 +70,7 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	for _, item := range commandpkg.AliasItems() {
 		autocomplete.Commands = append(autocomplete.Commands, PickerItem{ID: item.ID, Label: item.Label, Description: item.Description})
 	}
-	for _, item := range []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/status", Label: "/status", Description: "Show status"}, {ID: "/usage", Label: "/usage", Description: "Show provider usage"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/variants", Label: "/variants", Description: "Choose a model variant"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Switch session"}, {ID: "/resume", Label: "/resume", Description: "Resume a session"}, {ID: "/continue", Label: "/continue", Description: "Continue a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/clear", Label: "/clear", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/history", Label: "/history", Description: "Show session history"}, {ID: "/skills", Label: "/skills", Description: "List skills"}, {ID: "/mcps", Label: "/mcps", Description: "Show MCP integrations"}, {ID: "/lsp", Label: "/lsp", Description: "Show LSP integrations"}, {ID: "/plugins", Label: "/plugins", Description: "Show plugin integrations"}, {ID: "/editor", Label: "/editor", Description: "Open external editor"}, {ID: "/exit", Label: "/exit", Description: "Exit"}, {ID: "/quit", Label: "/quit", Description: "Exit"}, {ID: "/q", Label: "/q", Description: "Exit"}} {
+	for _, item := range []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/status", Label: "/status", Description: "Show status"}, {ID: "/usage", Label: "/usage", Description: "Show provider usage"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/variants", Label: "/variants", Description: "Choose a model variant"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Switch session"}, {ID: "/resume", Label: "/resume", Description: "Resume a session"}, {ID: "/continue", Label: "/continue", Description: "Continue a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/clear", Label: "/clear", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/history", Label: "/history", Description: "Show session history"}, {ID: "/stash", Label: "/stash", Description: "Stash or restore prompts"}, {ID: "/skills", Label: "/skills", Description: "List skills"}, {ID: "/mcps", Label: "/mcps", Description: "Show MCP integrations"}, {ID: "/lsp", Label: "/lsp", Description: "Show LSP integrations"}, {ID: "/plugins", Label: "/plugins", Description: "Show plugin integrations"}, {ID: "/editor", Label: "/editor", Description: "Open external editor"}, {ID: "/exit", Label: "/exit", Description: "Exit"}, {ID: "/quit", Label: "/quit", Description: "Exit"}, {ID: "/q", Label: "/q", Description: "Exit"}} {
 		found := false
 		for _, existing := range autocomplete.Commands {
 			if existing.ID == item.ID {
@@ -81,8 +83,9 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 		}
 	}
 	history, _ := OpenPromptHistory(app.Config.Home)
+	stash, _ := OpenPromptStash(app.Config.Home)
 	keymap, _ := LoadKeymap(app.Config.Home)
-	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, keymap: keymap, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1), promptHistory: history, viewport: NewViewport(80, 18)}
+	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, keymap: keymap, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1), promptHistory: history, promptStash: stash, viewport: NewViewport(80, 18)}
 }
 
 func (ui *UI) Run(ctx context.Context) error {
@@ -239,6 +242,10 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			continue
 		}
 		switch key.Kind {
+		case KeyStash:
+			if err := ui.stashCurrentPrompt(); err != nil {
+				fmt.Fprintln(ui.out, "stash error:", err)
+			}
 		case KeyOpenEditor:
 			value, editorErr := ui.openEditor(ctx, terminal, ui.editor.String())
 			if editorErr != nil {
@@ -498,6 +505,72 @@ func (ui *UI) acceptAutocomplete() {
 		Filename: item.ID,
 		Source:   &schema.PromptPartSource{Type: "file", Path: item.ID, Text: &schema.PromptTextSource{Start: start, End: start + len([]rune(virtual)), Value: virtual}},
 	})
+}
+
+func (ui *UI) popStash() error {
+	if ui.promptStash == nil {
+		return fmt.Errorf("prompt stash is not configured")
+	}
+	entry, ok, err := ui.promptStash.Pop()
+	if err != nil || !ok {
+		return err
+	}
+	ui.editor.Set(entry.Input)
+	ui.promptParts = clonePromptParts(entry.Parts)
+	return nil
+}
+
+func (ui *UI) openStashPicker() error {
+	if ui.promptStash == nil {
+		return fmt.Errorf("prompt stash is not configured")
+	}
+	entries := ui.promptStash.Entries()
+	items := make([]PickerItem, 0, len(entries))
+	for index := len(entries) - 1; index >= 0; index-- {
+		entry := entries[index]
+		preview := strings.TrimSpace(strings.SplitN(entry.Input, "\n", 2)[0])
+		if len([]rune(preview)) > 50 {
+			preview = string([]rune(preview)[:50]) + "…"
+		}
+		items = append(items, PickerItem{ID: fmt.Sprintf("%d", index), Label: preview, Description: timeAgo(entry.Timestamp)})
+	}
+	ui.picker, ui.pickerKind = NewPicker("Stash", items), "stash"
+	return nil
+}
+
+func (ui *UI) stashCurrentPrompt() error {
+	if ui.promptStash == nil {
+		return fmt.Errorf("prompt stash is not configured")
+	}
+	if ui.editor.Empty() && len(ui.promptParts) == 0 {
+		return nil
+	}
+	if err := ui.promptStash.Push(StashEntry{Input: ui.editor.String(), Parts: clonePromptParts(ui.promptParts)}); err != nil {
+		return err
+	}
+	ui.editor.Reset()
+	ui.promptParts = nil
+	fmt.Fprintln(ui.out, "Prompt stashed")
+	return nil
+}
+
+func timeAgo(timestamp int64) string {
+	if timestamp <= 0 {
+		return "unknown time"
+	}
+	seconds := int64(time.Since(time.UnixMilli(timestamp)).Seconds())
+	if seconds < 60 {
+		return "just now"
+	}
+	minutes := seconds / 60
+	if minutes < 60 {
+		return fmt.Sprintf("%dm ago", minutes)
+	}
+	hours := minutes / 60
+	if hours < 24 {
+		return fmt.Sprintf("%dh ago", hours)
+	}
+	return fmt.Sprintf("%dd ago", hours/24)
 }
 
 func (ui *UI) resetPromptHistoryNavigation() {
@@ -806,6 +879,35 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 			fmt.Fprintf(ui.out, "%s — %s\n", item.Name, item.Description)
 		}
 		return true, nil
+	case "/stash":
+		if ui.promptStash == nil {
+			return true, fmt.Errorf("prompt stash is not configured")
+		}
+		if len(parts) > 1 {
+			switch parts[1] {
+			case "pop":
+				return true, ui.popStash()
+			case "delete":
+				if len(parts) < 3 {
+					return true, fmt.Errorf("usage: /stash delete <index>")
+				}
+				return true, ui.promptStash.Remove(atoi(parts[2]) - 1)
+			case "list":
+				return true, ui.openStashPicker()
+			default:
+				return true, fmt.Errorf("usage: /stash [pop|list|delete <index>]")
+			}
+		}
+		if ui.editor.Empty() {
+			return true, ui.openStashPicker()
+		}
+		if err := ui.promptStash.Push(StashEntry{Input: ui.editor.String(), Parts: clonePromptParts(ui.promptParts)}); err != nil {
+			return true, err
+		}
+		ui.editor.Reset()
+		ui.promptParts = nil
+		fmt.Fprintln(ui.out, "Prompt stashed")
+		return true, nil
 	case "/palette":
 		items := make([]PickerItem, 0, len(ui.autocomplete.Commands))
 		items = append(items, ui.autocomplete.Commands...)
@@ -949,6 +1051,18 @@ func (ui *UI) selectPicker(ctx context.Context) error {
 		if err := ui.app.SetVariant(item.ID); err != nil {
 			return err
 		}
+	case "stash":
+		index := atoi(item.ID)
+		entries := ui.promptStash.Entries()
+		if index < 0 || index >= len(entries) {
+			return fmt.Errorf("stash entry is no longer available")
+		}
+		entry := entries[index]
+		if err := ui.promptStash.Remove(index); err != nil {
+			return err
+		}
+		ui.editor.Set(entry.Input)
+		ui.promptParts = clonePromptParts(entry.Parts)
 	case "agent":
 		if err := ui.app.SetAgent(item.ID); err != nil {
 			return err
