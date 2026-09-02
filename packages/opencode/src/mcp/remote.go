@@ -23,14 +23,35 @@ type RemoteConfig struct {
 }
 
 type Remote struct {
-	cfg    RemoteConfig
-	client *http.Client
-	mu     sync.Mutex
-	next   int64
+	cfg          RemoteConfig
+	client       *http.Client
+	mu           sync.Mutex
+	next         int64
+	capabilities map[string]any
 }
 type page struct {
-	Tools      []Tool `json:"tools"`
-	NextCursor string `json:"nextCursor,omitempty"`
+	Tools      []Tool  `json:"tools"`
+	NextCursor *string `json:"nextCursor"`
+}
+
+type Prompt struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Arguments   []map[string]any `json:"arguments,omitempty"`
+}
+
+type Resource struct {
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	MIMEType    string `json:"mimeType,omitempty"`
+}
+
+type ResourceTemplate struct {
+	URITemplate string `json:"uriTemplate"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	MIMEType    string `json:"mimeType,omitempty"`
 }
 
 func NewRemote(cfg RemoteConfig) (*Remote, error) {
@@ -84,25 +105,155 @@ func (r *Remote) Call(ctx context.Context, method string, params any, result any
 
 func (r *Remote) Initialize(ctx context.Context) error {
 	var result map[string]any
-	return r.Call(ctx, "initialize", map[string]any{
+	if err := r.Call(ctx, "initialize", map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
 		"clientInfo":      map[string]any{"name": "yteam", "version": "0.1.0"},
-	}, &result)
+	}, &result); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	if value, ok := result["capabilities"].(map[string]any); ok {
+		r.capabilities = value
+	} else {
+		r.capabilities = map[string]any{}
+	}
+	r.mu.Unlock()
+	return nil
 }
 
 func (r *Remote) Close() error { return nil }
 
 func (r *Remote) ListTools(ctx context.Context, cursor string) ([]Tool, string, error) {
+	items, next, err := r.listToolsPage(ctx, cursor)
+	if next == nil {
+		return items, "", err
+	}
+	return items, *next, err
+}
+
+func (r *Remote) listToolsPage(ctx context.Context, cursor string) ([]Tool, *string, error) {
 	params := map[string]any{}
 	if cursor != "" {
 		params["cursor"] = cursor
 	}
 	var result page
 	if err := r.Call(ctx, "tools/list", params, &result); err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	return result.Tools, result.NextCursor, nil
+}
+
+func (r *Remote) Supports(capability string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.capabilities[capability]
+	return ok
+}
+
+func (r *Remote) ListPrompts(ctx context.Context, cursor string) ([]Prompt, string, error) {
+	if !r.Supports("prompts") {
+		return []Prompt{}, "", nil
+	}
+	items, next, err := r.listPromptsPage(ctx, cursor)
+	return items, cursorString(next), err
+}
+
+func (r *Remote) ListResources(ctx context.Context, cursor string) ([]Resource, string, error) {
+	if !r.Supports("resources") {
+		return []Resource{}, "", nil
+	}
+	items, next, err := r.listResourcesPage(ctx, cursor)
+	return items, cursorString(next), err
+}
+
+func (r *Remote) ListResourceTemplates(ctx context.Context, cursor string) ([]ResourceTemplate, string, error) {
+	if !r.Supports("resources") {
+		return []ResourceTemplate{}, "", nil
+	}
+	items, next, err := r.listResourceTemplatesPage(ctx, cursor)
+	return items, cursorString(next), err
+}
+
+func (r *Remote) AllPrompts(ctx context.Context) ([]Prompt, error) {
+	return paginateCatalogPages(ctx, func(cursor string) ([]Prompt, *string, error) { return r.listPromptsPage(ctx, cursor) })
+}
+
+func (r *Remote) AllResources(ctx context.Context) ([]Resource, error) {
+	return paginateCatalogPages(ctx, func(cursor string) ([]Resource, *string, error) { return r.listResourcesPage(ctx, cursor) })
+}
+
+func (r *Remote) AllResourceTemplates(ctx context.Context) ([]ResourceTemplate, error) {
+	return paginateCatalogPages(ctx, func(cursor string) ([]ResourceTemplate, *string, error) {
+		return r.listResourceTemplatesPage(ctx, cursor)
+	})
+}
+
+func (r *Remote) listPromptsPage(ctx context.Context, cursor string) ([]Prompt, *string, error) {
+	return listCatalogPage[Prompt](ctx, r, "prompts/list", "prompts", cursor)
+}
+
+func (r *Remote) listResourcesPage(ctx context.Context, cursor string) ([]Resource, *string, error) {
+	return listCatalogPage[Resource](ctx, r, "resources/list", "resources", cursor)
+}
+
+func (r *Remote) listResourceTemplatesPage(ctx context.Context, cursor string) ([]ResourceTemplate, *string, error) {
+	return listCatalogPage[ResourceTemplate](ctx, r, "resources/templates/list", "resourceTemplates", cursor)
+}
+
+func listCatalogPage[T any](ctx context.Context, remote *Remote, method, field, cursor string) ([]T, *string, error) {
+	params := map[string]any{}
+	if cursor != "" {
+		params["cursor"] = cursor
+	}
+	var result map[string]json.RawMessage
+	if err := remote.Call(ctx, method, params, &result); err != nil {
+		return nil, nil, err
+	}
+	var items []T
+	if raw, ok := result[field]; ok {
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, nil, err
+		}
+	}
+	var next *string
+	if raw, ok := result["nextCursor"]; ok && string(raw) != "null" {
+		var value string
+		if err := json.Unmarshal(raw, &value); err != nil {
+			return nil, nil, err
+		}
+		next = &value
+	}
+	return items, next, nil
+}
+
+func cursorString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func paginateCatalogPages[T any](ctx context.Context, list func(string) ([]T, *string, error)) ([]T, error) {
+	items := []T{}
+	seen := map[string]bool{}
+	cursor := ""
+	for count := 0; count < MaxListPages; count++ {
+		page, next, err := list(cursor)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, page...)
+		if next == nil {
+			return items, nil
+		}
+		if seen[*next] {
+			return nil, fmt.Errorf("MCP list returned duplicate cursor: %s", *next)
+		}
+		seen[*next] = true
+		cursor = *next
+	}
+	return nil, fmt.Errorf("MCP list exceeded %d pages", MaxListPages)
 }
 
 func (r *Remote) CallTool(ctx context.Context, name string, arguments map[string]any) (string, error) {
@@ -148,19 +299,19 @@ func (r *Remote) AllTools(ctx context.Context) ([]Tool, error) {
 	seen := map[string]bool{}
 	cursor := ""
 	for count := 0; count < MaxListPages; count++ {
-		items, next, err := r.ListTools(ctx, cursor)
+		items, next, err := r.listToolsPage(ctx, cursor)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, items...)
-		if next == "" {
+		if next == nil {
 			return result, nil
 		}
-		if seen[next] {
-			return nil, fmt.Errorf("MCP list returned duplicate cursor: %s", next)
+		if seen[*next] {
+			return nil, fmt.Errorf("MCP list returned duplicate cursor: %s", *next)
 		}
-		seen[next] = true
-		cursor = next
+		seen[*next] = true
+		cursor = *next
 	}
 	return nil, fmt.Errorf("MCP list exceeded %d pages", MaxListPages)
 }

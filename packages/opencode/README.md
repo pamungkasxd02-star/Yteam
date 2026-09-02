@@ -6,6 +6,9 @@ The `src/mcp` subtree includes stdio plus remote MCP transport foundations:
 Streamable HTTP/SSE fallback, paginated tool discovery, duplicate-cursor
 protection, and external tool calls.
 
+The remote catalog also exposes paginated prompts, resources, and resource
+templates when the negotiated server capabilities advertise those collections.
+
 Remote MCP configuration is loaded from `YTEAM_MCP_CONFIG`,
 `<YTEAM_HOME>/mcp.json`, or `YTEAM_MCP_URL` during executable startup.
 

@@ -48,6 +48,8 @@ The Go foundation currently has working implementations and tests for:
 - remote MCP initialization and startup configuration from portable
   `mcp.json`/environment sources, with failed connections retained as visible
   status instead of aborting the executable;
+- MCP catalog pagination for tools, prompts, resources, and resource templates
+  with capability gating and upstream-compatible cursor semantics;
 - LSP initialize/initialized lifecycle, reusable root-scoped clients,
   extension-aware client selection, diagnostics, code actions, implementation,
   and call-hierarchy operations;
