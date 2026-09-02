@@ -7,7 +7,7 @@ compatibility.
 | OpenCode package | Go status |
 | --- | --- |
 | `opencode` | foundation executable |
-| `core` | foundation runtime |
+| `core` | foundation runtime, provider catalog, and usage accounting |
 | `core/src/snapshot` | portable project capture/diff/restore service |
 | `agent` | built-in build/plan catalog |
 | `protocol` | foundation contracts |

@@ -30,6 +30,8 @@ tests, and documentation.
 The Go foundation currently has working implementations and tests for:
 
 - OpenAI-compatible streaming, including streamed tool-call aggregation;
+- OpenAI-compatible model catalog metadata, model variants, finish reasons,
+  response usage accounting, and provider usage API;
 - per-session agent runner and single-run coordinator;
 - durable sessions with rename, fork, delete, compact, and export;
 - retry helper for transient provider failures and session compaction/revert

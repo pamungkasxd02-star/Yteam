@@ -91,8 +91,10 @@ For a single CI/container server, use `YTEAM_MCP_URL`, optional JSON
 connections initialize and discover paginated tools during startup; failures
 are exposed in `/api/mcp` and do not prevent the CLI from starting.
 
-The default Zen public marker is only sent in memory. Secrets are not committed
-or written to the repository.
+The provider model catalog is cached after `/models` discovery. Model metadata
+can include variants and token pricing; completion usage is exposed through
+`/api/provider/usage`. The default Zen public marker is only sent in memory.
+Secrets are not committed or written to the repository.
 
 The verified portable build targets are Windows, Linux amd64, and macOS amd64.
 Use `go test -p 1 ./...` on constrained Windows/386 environments to avoid

@@ -518,7 +518,7 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 		ui.selected = 0
 		return true, nil
 	case "/models":
-		models, err := ui.app.Provider.Models(ctx)
+		models, err := ui.app.Models(ctx)
 		if err != nil {
 			return true, err
 		}

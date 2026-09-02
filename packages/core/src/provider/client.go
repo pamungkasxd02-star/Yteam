@@ -20,11 +20,19 @@ import (
 type Client struct {
 	baseURL, apiKey string
 	httpClient      *http.Client
+	usage           usageState
+	models          Catalog
 }
 
 func New(baseURL, apiKey string) *Client {
-	return &Client{baseURL: strings.TrimRight(baseURL, "/"), apiKey: apiKey, httpClient: &http.Client{Timeout: 10 * time.Minute}}
+	client := &Client{baseURL: strings.TrimRight(baseURL, "/"), apiKey: apiKey, httpClient: &http.Client{Timeout: 10 * time.Minute}}
+	client.models = Catalog{client: client}
+	return client
 }
+
+func (c *Client) Catalog() *Catalog                    { return &c.models }
+func (c *Client) Usage() UsageTotals                   { return c.usage.snapshot() }
+func (c *Client) UsageByModel() map[string]UsageTotals { return c.usage.byModel() }
 func (c *Client) Models(ctx context.Context) ([]protocol.Model, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/models", nil)
 	if err != nil {
@@ -48,6 +56,7 @@ func (c *Client) Models(ctx context.Context) ([]protocol.Model, error) {
 	return payload.Data, nil
 }
 func (c *Client) Complete(ctx context.Context, input protocol.ChatRequest, emit func(protocol.StreamDelta) error) error {
+	input = c.Catalog().ApplyVariant(input)
 	input.Stream = true
 	body, err := json.Marshal(input)
 	if err != nil {
@@ -69,8 +78,11 @@ func (c *Client) Complete(ctx context.Context, input protocol.ChatRequest, emit 
 	}
 	if !strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
 		var payload struct {
+			Model   string          `json:"model"`
+			Usage   *protocol.Usage `json:"usage"`
 			Choices []struct {
-				Message struct {
+				FinishReason string `json:"finish_reason"`
+				Message      struct {
 					Content   string `json:"content"`
 					ToolCalls []struct {
 						ID       string `json:"id"`
@@ -91,7 +103,12 @@ func (c *Client) Complete(ctx context.Context, input protocol.ChatRequest, emit 
 			for _, call := range payload.Choices[0].Message.ToolCalls {
 				calls = append(calls, schema.ToolCall{ID: call.ID, Type: call.Type, Name: call.Function.Name, Arguments: call.Function.Arguments})
 			}
-			return emit(protocol.StreamDelta{Content: payload.Choices[0].Message.Content, ToolCalls: calls})
+			c.recordUsage(input.Model, payload.Model, payload.Usage)
+			return emit(protocol.StreamDelta{Content: payload.Choices[0].Message.Content, ToolCalls: calls, Usage: payload.Usage, Model: payload.Model, FinishReason: payload.Choices[0].FinishReason})
+		}
+		c.recordUsage(input.Model, payload.Model, payload.Usage)
+		if payload.Usage != nil {
+			return emit(protocol.StreamDelta{Usage: payload.Usage, Model: payload.Model})
 		}
 		return nil
 	}
@@ -108,8 +125,11 @@ func (c *Client) Complete(ctx context.Context, input protocol.ChatRequest, emit 
 			break
 		}
 		var chunk struct {
+			Model   string          `json:"model"`
+			Usage   *protocol.Usage `json:"usage"`
 			Choices []struct {
-				Delta struct {
+				FinishReason string `json:"finish_reason"`
+				Delta        struct {
 					Content   string `json:"content"`
 					Reasoning string `json:"reasoning_content"`
 					ToolCalls []struct {
@@ -124,7 +144,18 @@ func (c *Client) Complete(ctx context.Context, input protocol.ChatRequest, emit 
 				} `json:"delta"`
 			} `json:"choices"`
 		}
-		if json.Unmarshal([]byte(value), &chunk) != nil || len(chunk.Choices) == 0 {
+		if json.Unmarshal([]byte(value), &chunk) != nil {
+			continue
+		}
+		if chunk.Usage != nil {
+			c.recordUsage(input.Model, chunk.Model, chunk.Usage)
+		}
+		if len(chunk.Choices) == 0 {
+			if chunk.Usage != nil {
+				if err := emit(protocol.StreamDelta{Usage: chunk.Usage, Model: chunk.Model}); err != nil {
+					return err
+				}
+			}
 			continue
 		}
 		delta := chunk.Choices[0].Delta
@@ -145,8 +176,8 @@ func (c *Client) Complete(ctx context.Context, input protocol.ChatRequest, emit 
 			}
 			current.Arguments += call.Function.Arguments
 		}
-		if delta.Content != "" || delta.Reasoning != "" {
-			if err := emit(protocol.StreamDelta{Content: delta.Content, Reasoning: delta.Reasoning}); err != nil {
+		if delta.Content != "" || delta.Reasoning != "" || chunk.Choices[0].FinishReason != "" {
+			if err := emit(protocol.StreamDelta{Content: delta.Content, Reasoning: delta.Reasoning, Model: chunk.Model, FinishReason: chunk.Choices[0].FinishReason}); err != nil {
 				return err
 			}
 		}
@@ -167,6 +198,15 @@ func (c *Client) Complete(ctx context.Context, input protocol.ChatRequest, emit 
 		return emit(protocol.StreamDelta{ToolCalls: calls})
 	}
 	return nil
+}
+
+func (c *Client) recordUsage(requestModel, responseModel string, usage *protocol.Usage) {
+	model := responseModel
+	if model == "" {
+		model = requestModel
+	}
+	definition, _ := c.Catalog().FindCached(model)
+	c.usage.add(model, usage, definition)
 }
 
 func (c *Client) CompleteRetry(ctx context.Context, input protocol.ChatRequest, emit func(protocol.StreamDelta) error) error {

@@ -68,6 +68,15 @@ func TestHealthAndAuthorization(t *testing.T) {
 	}
 }
 
+func TestProviderUsageEndpoint(t *testing.T) {
+	s := testServer(t, "")
+	r := httptest.NewRecorder()
+	s.Handler().ServeHTTP(r, httptest.NewRequest(http.MethodGet, "/api/provider/usage", nil))
+	if r.Code != http.StatusOK || !strings.Contains(r.Body.String(), `"total"`) || !strings.Contains(r.Body.String(), `"by_model"`) {
+		t.Fatalf("usage = %d %s", r.Code, r.Body.String())
+	}
+}
+
 func TestSessionListAndExport(t *testing.T) {
 	s := testServer(t, "")
 	id := s.Runtime.CurrentSession().ID

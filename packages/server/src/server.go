@@ -58,12 +58,14 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, items)
 	case r.Method == http.MethodGet && r.URL.Path == "/api/models":
-		models, err := s.Runtime.Provider.Models(r.Context())
+		models, err := s.Runtime.Models(r.Context())
 		if err != nil {
 			writeError(w, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, models)
+	case r.Method == http.MethodGet && r.URL.Path == "/api/provider/usage":
+		writeJSON(w, http.StatusOK, map[string]any{"total": s.Runtime.ProviderUsage(), "by_model": s.Runtime.ProviderUsageByModel()})
 	case r.Method == http.MethodGet && r.URL.Path == "/api/tools":
 		writeJSON(w, http.StatusOK, s.Runtime.RunnerTools())
 	case r.Method == http.MethodGet && r.URL.Path == "/api/agent":

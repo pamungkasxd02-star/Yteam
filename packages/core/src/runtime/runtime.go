@@ -17,6 +17,7 @@ import (
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session/runner"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/snapshot"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/tool"
+	"github.com/pamungkasxd02-star/Yteam/packages/protocol/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/schema/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/skill/src"
 )
@@ -162,6 +163,27 @@ func (r *Runtime) ModelName() string {
 		return r.Model
 	}
 	return r.Config.Model
+}
+
+func (r *Runtime) Models(ctx context.Context) ([]protocol.Model, error) {
+	if r.Provider == nil {
+		return nil, fmt.Errorf("provider is not configured")
+	}
+	return r.Provider.Catalog().List(ctx)
+}
+
+func (r *Runtime) ProviderUsage() provider.UsageTotals {
+	if r.Provider == nil {
+		return provider.UsageTotals{}
+	}
+	return r.Provider.Usage()
+}
+
+func (r *Runtime) ProviderUsageByModel() map[string]provider.UsageTotals {
+	if r.Provider == nil {
+		return map[string]provider.UsageTotals{}
+	}
+	return r.Provider.UsageByModel()
 }
 
 func (r *Runtime) GitStatus(ctx context.Context) (gitstatus.Status, error) {
