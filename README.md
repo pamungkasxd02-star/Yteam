@@ -75,6 +75,12 @@ YTEAM_MODEL=mimo-v2.5-free
 YTEAM_HOME=/path/to/yteam-data
 ```
 
+Configuration files are merged in this order: `<YTEAM_HOME>/config.json`,
+project `yteam.json`, project `.yteam.json`, project `.yteam/config.json`,
+then optional `YTEAM_CONFIG`. Environment variables override all files, and
+CLI flags such as `-model` and `-agent` override the environment for that run.
+This hierarchy is portable and uses no checkout-specific paths.
+
 Remote MCP servers can be configured in `mcp.json` below `YTEAM_HOME`:
 
 ```json
