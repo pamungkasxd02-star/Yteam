@@ -138,6 +138,8 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, s.Runtime.MCP())
 	case r.Method == http.MethodGet && r.URL.Path == "/api/lsp":
 		writeJSON(w, http.StatusOK, s.Runtime.LSP())
+	case r.Method == http.MethodGet && r.URL.Path == "/api/plugin":
+		writeJSON(w, http.StatusOK, s.Runtime.Plugins())
 	case r.Method == http.MethodPost && r.URL.Path == "/api/lsp":
 		var input map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {

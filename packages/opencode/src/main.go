@@ -18,6 +18,7 @@ import (
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
 	"github.com/pamungkasxd02-star/Yteam/packages/opencode/src/lsp"
 	"github.com/pamungkasxd02-star/Yteam/packages/opencode/src/mcp"
+	pluginpkg "github.com/pamungkasxd02-star/Yteam/packages/plugin/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/server/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/tui/src"
 )
@@ -64,6 +65,17 @@ func main() {
 		for name, remoteConfig := range configs {
 			if connectErr := mcpManager.ConnectRemote(context.Background(), app, name, remoteConfig); connectErr != nil {
 				fmt.Fprintln(os.Stderr, "MCP remote warning:", name, connectErr)
+			}
+		}
+	}
+	pluginManager := pluginpkg.NewManager()
+	app.SetPluginStatus(func() any { return pluginManager.Status() })
+	if configs, configErr := pluginpkg.LoadConfigs(cfg.Home); configErr != nil {
+		fmt.Fprintln(os.Stderr, "plugin config warning:", configErr)
+	} else {
+		for name, pluginConfig := range configs {
+			if connectErr := pluginManager.Connect(context.Background(), app, name, pluginConfig); connectErr != nil {
+				fmt.Fprintln(os.Stderr, "plugin warning:", name, connectErr)
 			}
 		}
 	}

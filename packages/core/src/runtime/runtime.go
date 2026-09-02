@@ -39,6 +39,7 @@ type Runtime struct {
 	SkillContext string
 	LSPStatus    func() any
 	LSPExecute   func(context.Context, any) (any, error)
+	PluginStatus func() any
 	Inputs       *session.InputQueue
 	Questions    *question.Manager
 	Snapshot     *snapshot.Service
@@ -258,6 +259,20 @@ func (r *Runtime) LSP() any {
 		return []any{}
 	}
 	return r.LSPStatus()
+}
+
+func (r *Runtime) SetPluginStatus(status func() any) {
+	r.mu.Lock()
+	r.PluginStatus = status
+	r.mu.Unlock()
+}
+func (r *Runtime) Plugins() any {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.PluginStatus == nil {
+		return []any{}
+	}
+	return r.PluginStatus()
 }
 
 func (r *Runtime) SetLSPExecute(execute func(context.Context, any) (any, error)) {

@@ -51,6 +51,8 @@ The Go foundation currently has working implementations and tests for:
 - LSP initialize/initialized lifecycle, reusable root-scoped clients,
   extension-aware client selection, diagnostics, code actions, implementation,
   and call-hierarchy operations;
+- portable subprocess plugin bridge with manifest loading, initialize,
+  tools/list, tools/call, isolated status, and tool-registry integration;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
