@@ -120,6 +120,7 @@ func (k *Keymap) Normalize(key Key) Key {
 		{ActionHistoryPrevious, KeyUp}, {ActionHistoryNext, KeyDown},
 		{ActionPageUp, KeyPageUp}, {ActionPageDown, KeyPageDown},
 		{ActionEditor, KeyOpenEditor},
+		{ActionExit, KeyCtrlC},
 	}
 	for _, item := range items {
 		if keyBindingMatches(key, k.Binding(item.action)) {
@@ -161,6 +162,8 @@ func keyBindingMatches(key Key, binding string) bool {
 		return key.Kind == KeyPageDown
 	case "ctrl+e":
 		return key.Kind == KeyCtrlE
+	case "ctrl+q":
+		return key.Kind == KeyCtrlQ
 	}
 	return false
 }

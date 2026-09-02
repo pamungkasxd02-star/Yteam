@@ -220,6 +220,10 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			return nil
 		}
 		key = ui.keymap.Normalize(key)
+		if key.Kind == KeyCtrlC {
+			ui.app.InterruptSession(ui.app.CurrentSession().ID)
+			return nil
+		}
 		if ui.picker != nil {
 			if err := ui.handlePickerKey(ctx, key); err != nil {
 				fmt.Fprintln(ui.out, "error:", err)
@@ -393,12 +397,14 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				ui.draw()
 				continue
 			}
-			if ui.promptHistory != nil {
+			atBufferStart := ui.editor.Cursor() == 0
+			atLineStart := ui.editor.Cursor() == lineStart(ui.editor.value, ui.editor.cursor)
+			if ui.promptHistory != nil && atBufferStart && atLineStart {
 				if value, ok := ui.promptHistory.Move(-1, ui.editor.String()); ok {
 					ui.editor.Set(value.Input)
 					ui.promptParts = clonePromptParts(value.Parts)
 				}
-			} else if ui.editor.Cursor() == lineStart(ui.editor.value, ui.editor.cursor) && lineStart(ui.editor.value, ui.editor.cursor) == 0 {
+			} else if atLineStart && atBufferStart {
 				ui.editor.HistoryUp()
 			} else {
 				ui.editor.Up()
@@ -410,7 +416,7 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				continue
 			}
 			lastLine := lineEnd(ui.editor.value, ui.editor.cursor) == len(ui.editor.value)
-			if ui.promptHistory != nil {
+			if ui.promptHistory != nil && lastLine {
 				if value, ok := ui.promptHistory.Move(1, ui.editor.String()); ok {
 					ui.editor.Set(value.Input)
 					ui.promptParts = clonePromptParts(value.Parts)

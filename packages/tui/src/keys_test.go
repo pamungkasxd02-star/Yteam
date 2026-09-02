@@ -94,6 +94,13 @@ func TestKeyReaderDecodesWordKeys(t *testing.T) {
 	}
 }
 
+func TestKeyReaderDecodesCtrlQ(t *testing.T) {
+	key, err := NewKeyReader(strings.NewReader("\x11")).ReadKey()
+	if err != nil || key.Kind != KeyCtrlQ {
+		t.Fatalf("ctrl-q = %#v, %v", key, err)
+	}
+}
+
 func TestKeyReaderDropsOversizedPasteAndKeepsFollowingKey(t *testing.T) {
 	reader := NewKeyReader(strings.NewReader("\x1b[200~123456789\x1b[201~x"))
 	reader.maxPasteBytes = 8

@@ -40,3 +40,11 @@ func TestKeymapNormalizesConfiguredActions(t *testing.T) {
 		t.Fatalf("normalized word key = %d", key.Kind)
 	}
 }
+
+func TestKeymapCanRemapExit(t *testing.T) {
+	keymap := DefaultKeymap()
+	keymap.bindings[ActionExit] = "ctrl+q"
+	if got := keymap.Normalize(Key{Kind: KeyCtrlQ}); got.Kind != KeyCtrlC {
+		t.Fatalf("exit key = %d, want %d", got.Kind, KeyCtrlC)
+	}
+}

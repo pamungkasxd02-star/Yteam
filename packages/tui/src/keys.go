@@ -34,6 +34,7 @@ const (
 	KeyOpenEditor
 	KeyCtrlN
 	KeyCtrlE
+	KeyCtrlQ
 )
 
 type Key struct {
@@ -91,6 +92,10 @@ func (r *KeyReader) ReadKey() (Key, error) {
 	if data[0] == 5 {
 		r.pending = data[1:]
 		return Key{Kind: KeyCtrlE}, nil
+	}
+	if data[0] == 17 {
+		r.pending = data[1:]
+		return Key{Kind: KeyCtrlQ}, nil
 	}
 	if data[0] == 23 {
 		r.pending = data[1:]
