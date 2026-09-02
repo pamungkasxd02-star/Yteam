@@ -71,6 +71,8 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, s.Runtime.RunnerTools())
 	case r.Method == http.MethodGet && r.URL.Path == "/api/agent":
 		writeJSON(w, http.StatusOK, map[string]any{"current": s.Runtime.AgentName(), "agents": s.Runtime.Agents()})
+	case r.Method == http.MethodGet && r.URL.Path == "/api/command":
+		writeJSON(w, http.StatusOK, s.Runtime.CommandList())
 	case r.Method == http.MethodPost && r.URL.Path == "/api/agent":
 		var input struct {
 			Name string `json:"name"`

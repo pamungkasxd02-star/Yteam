@@ -87,6 +87,15 @@ func TestRunStateEndpoint(t *testing.T) {
 	}
 }
 
+func TestCommandRegistryEndpoint(t *testing.T) {
+	s := testServer(t, "")
+	r := httptest.NewRecorder()
+	s.Handler().ServeHTTP(r, httptest.NewRequest(http.MethodGet, "/api/command", nil))
+	if r.Code != http.StatusOK || !strings.Contains(r.Body.String(), `"name":"init"`) || !strings.Contains(r.Body.String(), `"name":"review"`) {
+		t.Fatalf("commands = %d %s", r.Code, r.Body.String())
+	}
+}
+
 func TestSessionListAndExport(t *testing.T) {
 	s := testServer(t, "")
 	id := s.Runtime.CurrentSession().ID

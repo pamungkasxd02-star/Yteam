@@ -105,6 +105,12 @@ func (c *Client) Agents(ctx context.Context) (AgentState, error) {
 	return result, err
 }
 
+func (c *Client) Commands(ctx context.Context) ([]Command, error) {
+	var result []Command
+	err := c.doJSON(ctx, http.MethodGet, "/api/command", nil, &result)
+	return result, err
+}
+
 func (c *Client) SetModel(ctx context.Context, model string) (Selection, error) {
 	var result Selection
 	err := c.doJSON(ctx, http.MethodPost, "/api/model", map[string]string{"model": model}, &result)

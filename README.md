@@ -57,6 +57,12 @@ Interactive commands include `/models`, `/model <id>`, `/agents`,
 Use `-agent plan` or `YTEAM_AGENT=plan` to run the read-only planning agent;
 `build` remains the default and can use the full tool set.
 
+Commands are discovered from Markdown files under `command/`, `commands/`,
+`.opencode/command/`, and `.opencode/commands/`. Supported frontmatter is
+`description`, `agent`, `model`, `variant`, and `subtask`; `$1`–`$9` and
+`$ARGUMENTS` are expanded when a command is invoked. The registry is available
+through `GET /api/command`.
+
 Session API lifecycle also includes compaction and revert state. Revert metadata
 and portable pre-prompt file restoration are available through the snapshot
 service.

@@ -27,6 +27,18 @@ type AgentState struct {
 	Agents  []Agent `json:"agents"`
 }
 
+type Command struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Agent       string   `json:"agent,omitempty"`
+	Model       string   `json:"model,omitempty"`
+	Variant     string   `json:"variant,omitempty"`
+	Source      string   `json:"source,omitempty"`
+	Template    string   `json:"template"`
+	Subtask     bool     `json:"subtask,omitempty"`
+	Hints       []string `json:"hints"`
+}
+
 type Selection struct {
 	Current string `json:"current"`
 }

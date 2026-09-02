@@ -18,5 +18,6 @@ compatibility.
 | `opencode/src/lsp` | LSP JSON-RPC lifecycle, reusable client selection, and advanced operations |
 | `plugin` | portable subprocess JSON-RPC plugin lifecycle and tool bridge |
 | `client` | typed HTTP/SSE SDK for server and session contracts |
+| `command` | Markdown command registry, hints, and template expansion |
 | `skill` | `SKILL.md` discovery |
 | all other `packages/*` | boundary created; implementation staged |

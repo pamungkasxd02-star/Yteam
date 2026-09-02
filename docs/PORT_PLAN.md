@@ -77,6 +77,9 @@ The Go foundation currently has working implementations and tests for:
   prompts, CLI/environment selection, and plan-mode read-only tool filtering;
 - portable configuration hierarchy with user/project/explicit-file merge,
   environment precedence, CLI overrides, and malformed-file validation;
+- command registry with upstream `init`/`review` entries, Markdown
+  frontmatter, source metadata, argument hints, `$1`–`$9`/`$ARGUMENTS`
+  expansion, and runtime/server/client listing;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,

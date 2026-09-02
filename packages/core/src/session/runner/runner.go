@@ -22,6 +22,7 @@ type Runner struct {
 	Store    *session.Store
 	MaxSteps int
 	Agent    string
+	Variant  string
 }
 
 func (r *Runner) Run(ctx context.Context, sess *session.Session, model, system string) error {
@@ -62,7 +63,7 @@ func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, mode
 		var usage *protocol.Usage
 		responseModel := ""
 		finishReason := ""
-		err := r.Provider.CompleteRetryWithStatus(ctx, protocol.ChatRequest{Model: model, Messages: messages, Tools: r.toolDefinitions()}, func(delta protocol.StreamDelta) error {
+		err := r.Provider.CompleteRetryWithStatus(ctx, protocol.ChatRequest{Model: model, Variant: r.Variant, Messages: messages, Tools: r.toolDefinitions()}, func(delta protocol.StreamDelta) error {
 			if delta.Content != "" {
 				text.WriteString(delta.Content)
 				if options.OnText != nil {

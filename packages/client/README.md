@@ -23,3 +23,6 @@ approval state is durable under the configured application home.
 `Run` reads the session's durable execution state, including `busy`,
 `retrying`, `completed`, `failed`, or `interrupted`, attempt count, error, and
 start/finish timestamps.
+
+`Commands` lists the built-in and project Markdown command registry, including
+source, metadata, template, subtask flag, and argument hints.

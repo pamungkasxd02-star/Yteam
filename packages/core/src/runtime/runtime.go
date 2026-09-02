@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 
 	agentpkg "github.com/pamungkasxd02-star/Yteam/packages/agent/src"
+	commandpkg "github.com/pamungkasxd02-star/Yteam/packages/command/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/config"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/event"
 	gitstatus "github.com/pamungkasxd02-star/Yteam/packages/core/src/git"
@@ -45,6 +47,7 @@ type Runtime struct {
 	Inputs       *session.InputQueue
 	Questions    *question.Manager
 	Snapshot     *snapshot.Service
+	Commands     map[string]commandpkg.Info
 	runMu        sync.Mutex
 	cancelRuns   map[string]context.CancelFunc
 }
@@ -70,6 +73,11 @@ func New(cfg config.Config, root string, store *session.Store, current *session.
 	}
 	tools := tool.Builtins(permissions)
 	tools.Add(tool.Question{Manager: questionsAdapter{manager: questions}})
+	commands, _ := commandpkg.Discover(root)
+	commandMap := make(map[string]commandpkg.Info, len(commands))
+	for _, item := range commands {
+		commandMap[item.Name] = item
+	}
 	selectedAgent := firstAgent(cfg.Agent)
 	if current != nil && current.Agent != "" {
 		selectedAgent = firstAgent(current.Agent)
@@ -96,6 +104,7 @@ func New(cfg config.Config, root string, store *session.Store, current *session.
 		cancelRuns:  map[string]context.CancelFunc{},
 		Questions:   questions,
 		Snapshot:    snapshots,
+		Commands:    commandMap,
 	}
 }
 
@@ -186,12 +195,29 @@ func (r *Runtime) Agents() []map[string]string {
 	return result
 }
 
+func (r *Runtime) CommandList() []commandpkg.Info {
+	items := make([]commandpkg.Info, 0, len(r.Commands))
+	for _, item := range r.Commands {
+		items = append(items, item)
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	return items
+}
+
 func (r *Runtime) AgentPrompt() string {
 	item, ok := agentpkg.Find(r.AgentName())
 	if !ok {
 		return ""
 	}
 	return item.Prompt
+}
+
+func (r *Runtime) SystemPromptFor(agentName string) string {
+	r.mu.RLock()
+	base, skills := r.Config.SystemPrompt, r.SkillContext
+	r.mu.RUnlock()
+	item, _ := agentpkg.Find(agentName)
+	return strings.TrimSpace(strings.Join([]string{base, item.Prompt, skills}, "\n\n"))
 }
 
 func (r *Runtime) SetModel(model string) error {
@@ -648,6 +674,11 @@ func (r *Runtime) Command(ctx context.Context, input string, out io.Writer) (boo
 	if len(parts) == 0 || !strings.HasPrefix(parts[0], "/") {
 		return false, nil
 	}
+	name := strings.TrimPrefix(parts[0], "/")
+	if item, ok := r.Commands[name]; ok {
+		args := parts[1:]
+		return true, r.promptCommand(ctx, item, args, out)
+	}
 	switch parts[0] {
 	case "/help":
 		r.Help(out)
@@ -745,7 +776,22 @@ func (r *Runtime) Prompt(ctx context.Context, text string, out io.Writer) error 
 	return r.PromptDelivery(ctx, text, session.DeliveryQueue, out)
 }
 
+func (r *Runtime) promptCommand(ctx context.Context, item commandpkg.Info, args []string, out io.Writer) error {
+	model, agentName, variant := r.ModelName(), r.AgentName(), item.Variant
+	if item.Model != "" {
+		model = item.Model
+	}
+	if item.Agent != "" {
+		agentName = item.Agent
+	}
+	return r.promptDelivery(ctx, commandpkg.Expand(item.Template, args), session.DeliveryQueue, out, model, agentName, variant)
+}
+
 func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery session.Delivery, out io.Writer) error {
+	return r.promptDelivery(ctx, text, delivery, out, "", "", "")
+}
+
+func (r *Runtime) promptDelivery(ctx context.Context, text string, delivery session.Delivery, out io.Writer, selectedModel, selectedAgent, selectedVariant string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil
@@ -788,6 +834,12 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 	}
 	current.Messages = append(current.Messages, user)
 	current.Agent = r.AgentName()
+	if selectedAgent == "" {
+		selectedAgent = r.AgentName()
+	}
+	if selectedModel == "" {
+		selectedModel = r.ModelName()
+	}
 	if next, stateErr := r.Store.SetRunState(current.ID, session.RunBusy, 0, ""); stateErr == nil {
 		current.RunStatus = next.RunStatus
 		current.RunAttempt = next.RunAttempt
@@ -855,8 +907,9 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 		r.runMu.Unlock()
 	}()
 	runErr := r.Coordinator.Run(runCtx, current.ID, func(runCtx context.Context) error {
-		r.Runner.Agent = r.AgentName()
-		return r.Runner.RunWithOptions(runCtx, current, r.ModelName(), r.SystemPrompt(), options)
+		r.Runner.Agent = selectedAgent
+		r.Runner.Variant = selectedVariant
+		return r.Runner.RunWithOptions(runCtx, current, selectedModel, r.SystemPromptFor(selectedAgent), options)
 	})
 	if runErr != nil {
 		state := session.RunFailed
