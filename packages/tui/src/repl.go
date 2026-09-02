@@ -25,7 +25,7 @@ func Run(ctx context.Context, app *runtime.Runtime, in io.Reader, out io.Writer)
 		if line == "" {
 			continue
 		}
-		if line == "/exit" || line == "/quit" {
+		if line == "/exit" || line == "/quit" || line == "/q" {
 			return nil
 		}
 		if handled, err := app.Command(ctx, line, out); handled {

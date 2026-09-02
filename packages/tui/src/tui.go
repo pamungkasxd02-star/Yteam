@@ -62,7 +62,7 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	for _, item := range app.CommandList() {
 		autocomplete.Commands = append(autocomplete.Commands, PickerItem{ID: "/" + item.Name, Label: "/" + item.Name, Description: item.Description})
 	}
-	for _, item := range []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Choose a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/editor", Label: "/editor", Description: "Open external editor"}, {ID: "/exit", Label: "/exit", Description: "Exit YTEAM"}} {
+	for _, item := range []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/status", Label: "/status", Description: "Show status"}, {ID: "/usage", Label: "/usage", Description: "Show provider usage"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Switch session"}, {ID: "/resume", Label: "/resume", Description: "Resume a session"}, {ID: "/continue", Label: "/continue", Description: "Continue a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/clear", Label: "/clear", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/history", Label: "/history", Description: "Show session history"}, {ID: "/skills", Label: "/skills", Description: "List skills"}, {ID: "/mcps", Label: "/mcps", Description: "Show MCP integrations"}, {ID: "/lsp", Label: "/lsp", Description: "Show LSP integrations"}, {ID: "/plugins", Label: "/plugins", Description: "Show plugin integrations"}, {ID: "/editor", Label: "/editor", Description: "Open external editor"}, {ID: "/exit", Label: "/exit", Description: "Exit"}, {ID: "/quit", Label: "/quit", Description: "Exit"}, {ID: "/q", Label: "/q", Description: "Exit"}} {
 		found := false
 		for _, existing := range autocomplete.Commands {
 			if existing.ID == item.ID {
@@ -694,6 +694,19 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 	case "/mcps":
 		value := ui.app.MCP()
 		data, _ := json.MarshalIndent(value, "", "  ")
+		fmt.Fprintln(ui.out, string(data))
+		return true, nil
+	case "/usage":
+		value := map[string]any{"total": ui.app.ProviderUsage(), "by_model": ui.app.ProviderUsageByModel()}
+		data, _ := json.MarshalIndent(value, "", "  ")
+		fmt.Fprintln(ui.out, string(data))
+		return true, nil
+	case "/lsp":
+		data, _ := json.MarshalIndent(ui.app.LSP(), "", "  ")
+		fmt.Fprintln(ui.out, string(data))
+		return true, nil
+	case "/plugins":
+		data, _ := json.MarshalIndent(ui.app.Plugins(), "", "  ")
 		fmt.Fprintln(ui.out, string(data))
 		return true, nil
 	case "/skills":

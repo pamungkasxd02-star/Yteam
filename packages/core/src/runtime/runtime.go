@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -684,8 +685,36 @@ func (r *Runtime) Command(ctx context.Context, input string, out io.Writer) (boo
 		r.Help(out)
 	case "/status":
 		r.Status(out)
+	case "/usage":
+		data := struct {
+			Total   provider.UsageTotals            `json:"total"`
+			ByModel map[string]provider.UsageTotals `json:"by_model"`
+		}{Total: r.ProviderUsage(), ByModel: r.ProviderUsageByModel()}
+		if err := json.NewEncoder(out).Encode(data); err != nil {
+			return true, err
+		}
 	case "/history":
 		r.History(out)
+	case "/mcps":
+		if err := json.NewEncoder(out).Encode(r.MCP()); err != nil {
+			return true, err
+		}
+	case "/lsp":
+		if err := json.NewEncoder(out).Encode(r.LSP()); err != nil {
+			return true, err
+		}
+	case "/plugins":
+		if err := json.NewEncoder(out).Encode(r.Plugins()); err != nil {
+			return true, err
+		}
+	case "/skills":
+		items, err := r.Skills()
+		if err != nil {
+			return true, err
+		}
+		for _, item := range items {
+			fmt.Fprintf(out, "%s — %s\n", item.Name, item.Description)
+		}
 	case "/sessions", "/resume", "/continue":
 		items, err := r.ListSessions()
 		if err != nil {
@@ -760,6 +789,8 @@ func (r *Runtime) Command(ctx context.Context, input string, out io.Writer) (boo
 		}
 		_, err = io.WriteString(out, data)
 		return true, err
+	case "/exit", "/quit", "/q":
+		return true, nil
 	default:
 		fmt.Fprintf(out, "Unknown command: %s\n", parts[0])
 	}
@@ -952,6 +983,7 @@ func (r *Runtime) Help(out io.Writer) {
 	fmt.Fprintln(out, "OpenCode commands:")
 	fmt.Fprintln(out, "  /help                  show help")
 	fmt.Fprintln(out, "  /status                show project and session status")
+	fmt.Fprintln(out, "  /usage                 show provider usage")
 	fmt.Fprintln(out, "  /models                list available models")
 	fmt.Fprintln(out, "  /model <id>            select a model")
 	fmt.Fprintln(out, "  /agents                list or select an agent")
@@ -965,6 +997,8 @@ func (r *Runtime) Help(out io.Writer) {
 	fmt.Fprintln(out, "  /history               show session history")
 	fmt.Fprintln(out, "  /skills                list discovered skills")
 	fmt.Fprintln(out, "  /mcps                  show MCP integration status")
+	fmt.Fprintln(out, "  /lsp                   show LSP integration status")
+	fmt.Fprintln(out, "  /plugins               show plugin integration status")
 	fmt.Fprintln(out, "  /exit, /quit, /q       exit")
 }
 func (r *Runtime) Status(out io.Writer) {

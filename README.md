@@ -52,8 +52,9 @@ yteam
 
 Interactive commands include `/models`, `/model <id>`, `/agents`,
 `/agent <name>`, `/sessions` (also `/resume` and `/continue`), `/new` (also
-`/clear`), `/fork`, `/rename <title>`, `/history`, `/skills`, `/mcps`,
-`/editor`, and `/export [md|json]`. Exit aliases are `/exit`, `/quit`, and `/q`.
+`/clear`), `/fork`, `/rename <title>`, `/history`, `/skills`, `/mcps`, `/lsp`,
+`/plugins`, `/usage`, `/editor`, and `/export [md|json]`. Exit aliases are
+`/exit`, `/quit`, and `/q`.
 
 Use `-agent plan` or `YTEAM_AGENT=plan` to run the read-only planning agent;
 `build` remains the default and can use the full tool set.
