@@ -3,7 +3,8 @@ package session
 import "testing"
 
 func TestStoreRoundTripAndList(t *testing.T) {
-	store, err := Open(t.TempDir(), "C:\\work\\project")
+	projectRoot := t.TempDir()
+	store, err := Open(t.TempDir(), projectRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -11,7 +12,7 @@ func TestStoreRoundTripAndList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sess.Directory != "C:\\work\\project" {
+	if sess.Directory != projectRoot {
 		t.Fatalf("directory = %q", sess.Directory)
 	}
 	if err := store.Append(sess.ID, Message{Role: "user", Content: "hello"}); err != nil {

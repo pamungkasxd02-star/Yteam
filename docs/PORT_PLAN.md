@@ -2,8 +2,13 @@
 
 ## Source of truth
 
-The audited OpenCode tree is at `D:\opencode\tmp\opencode-upstream`. Its
-package names are reproduced in this repository under `packages/`.
+The OpenCode source used for behavioral comparison is external to this
+repository. Its package names are reproduced here under `packages/`; no local
+developer path is required at runtime.
+
+All paths in this repository are portable. Local source checkouts, user names,
+and workstation-specific directories are intentionally excluded from source,
+tests, and documentation.
 
 ## Phases
 
