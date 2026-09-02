@@ -39,7 +39,8 @@ The Go foundation currently has working implementations and tests for:
 - project-safe read/list/glob/grep/write/edit/bash tools;
 - HTTP health, status, sessions, messages, context, history, prompt, export,
   event, model, agent, tools, and permission routes;
-- MCP stdio and LSP JSON-RPC client/operation foundations;
+- MCP stdio plus remote transport/pagination and LSP JSON-RPC
+  client/operation foundations;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
