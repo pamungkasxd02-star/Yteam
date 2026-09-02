@@ -40,6 +40,7 @@ type Runtime struct {
 	Permissions  *permission.Engine
 	Agent        string
 	Model        string
+	Variant      string
 	MCPStatus    func() any
 	SkillContext string
 	LSPStatus    func() any
@@ -229,8 +230,57 @@ func (r *Runtime) SetModel(model string) error {
 	r.mu.Lock()
 	r.Model = model
 	r.Config.Model = model
+	r.Variant = ""
 	r.mu.Unlock()
 	return nil
+}
+
+func (r *Runtime) SetVariant(variant string) error {
+	variant = strings.TrimSpace(variant)
+	if variant == "" {
+		r.mu.Lock()
+		r.Variant = ""
+		r.mu.Unlock()
+		return nil
+	}
+	if r.Provider == nil {
+		return fmt.Errorf("provider is not configured")
+	}
+	model, err := r.Provider.Catalog().Find(context.Background(), r.ModelName())
+	if err != nil {
+		return err
+	}
+	if len(model.Variants) > 0 {
+		if _, ok := model.Variants[variant]; !ok {
+			return fmt.Errorf("unknown variant %q for model %q", variant, model.ID)
+		}
+	}
+	r.mu.Lock()
+	r.Variant = variant
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *Runtime) VariantName() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.Variant
+}
+
+func (r *Runtime) Variants(ctx context.Context) ([]string, error) {
+	if r.Provider == nil {
+		return nil, fmt.Errorf("provider is not configured")
+	}
+	model, err := r.Provider.Catalog().Find(ctx, r.ModelName())
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(model.Variants))
+	for name := range model.Variants {
+		result = append(result, name)
+	}
+	sort.Strings(result)
+	return result, nil
 }
 
 func (r *Runtime) ModelName() string {
@@ -731,6 +781,21 @@ func (r *Runtime) Command(ctx context.Context, input string, out io.Writer) (boo
 		for _, item := range items {
 			fmt.Fprintln(out, item.ID)
 		}
+	case "/variants", "/variant":
+		if len(parts) < 2 {
+			items, err := r.Variants(ctx)
+			if err != nil {
+				return true, err
+			}
+			for _, item := range items {
+				fmt.Fprintln(out, item)
+			}
+			return true, nil
+		}
+		if err := r.SetVariant(parts[1]); err != nil {
+			return true, err
+		}
+		fmt.Fprintln(out, "active variant:", r.VariantName())
 	case "/agent", "/agents":
 		if len(parts) < 2 {
 			fmt.Fprintln(out, "active agent:", r.AgentName(), "(build, plan)")
@@ -875,6 +940,9 @@ func (r *Runtime) promptDelivery(ctx context.Context, text string, delivery sess
 	if selectedModel == "" {
 		selectedModel = r.ModelName()
 	}
+	if selectedVariant == "" {
+		selectedVariant = r.VariantName()
+	}
 	if next, stateErr := r.Store.SetRunState(current.ID, session.RunBusy, 0, ""); stateErr == nil {
 		current.RunStatus = next.RunStatus
 		current.RunAttempt = next.RunAttempt
@@ -986,6 +1054,8 @@ func (r *Runtime) Help(out io.Writer) {
 	fmt.Fprintln(out, "  /usage                 show provider usage")
 	fmt.Fprintln(out, "  /models                list available models")
 	fmt.Fprintln(out, "  /model <id>            select a model")
+	fmt.Fprintln(out, "  /variants              list model variants")
+	fmt.Fprintln(out, "  /variant <name>        select a model variant")
 	fmt.Fprintln(out, "  /agents                list or select an agent")
 	fmt.Fprintln(out, "  /agent <name>          select an agent")
 	fmt.Fprintln(out, "  /sessions              switch session")

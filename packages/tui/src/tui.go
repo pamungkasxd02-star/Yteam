@@ -62,7 +62,7 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	for _, item := range app.CommandList() {
 		autocomplete.Commands = append(autocomplete.Commands, PickerItem{ID: "/" + item.Name, Label: "/" + item.Name, Description: item.Description})
 	}
-	for _, item := range []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/status", Label: "/status", Description: "Show status"}, {ID: "/usage", Label: "/usage", Description: "Show provider usage"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Switch session"}, {ID: "/resume", Label: "/resume", Description: "Resume a session"}, {ID: "/continue", Label: "/continue", Description: "Continue a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/clear", Label: "/clear", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/history", Label: "/history", Description: "Show session history"}, {ID: "/skills", Label: "/skills", Description: "List skills"}, {ID: "/mcps", Label: "/mcps", Description: "Show MCP integrations"}, {ID: "/lsp", Label: "/lsp", Description: "Show LSP integrations"}, {ID: "/plugins", Label: "/plugins", Description: "Show plugin integrations"}, {ID: "/editor", Label: "/editor", Description: "Open external editor"}, {ID: "/exit", Label: "/exit", Description: "Exit"}, {ID: "/quit", Label: "/quit", Description: "Exit"}, {ID: "/q", Label: "/q", Description: "Exit"}} {
+	for _, item := range []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/status", Label: "/status", Description: "Show status"}, {ID: "/usage", Label: "/usage", Description: "Show provider usage"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/variants", Label: "/variants", Description: "Choose a model variant"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Switch session"}, {ID: "/resume", Label: "/resume", Description: "Resume a session"}, {ID: "/continue", Label: "/continue", Description: "Continue a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/clear", Label: "/clear", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/history", Label: "/history", Description: "Show session history"}, {ID: "/skills", Label: "/skills", Description: "List skills"}, {ID: "/mcps", Label: "/mcps", Description: "Show MCP integrations"}, {ID: "/lsp", Label: "/lsp", Description: "Show LSP integrations"}, {ID: "/plugins", Label: "/plugins", Description: "Show plugin integrations"}, {ID: "/editor", Label: "/editor", Description: "Open external editor"}, {ID: "/exit", Label: "/exit", Description: "Exit"}, {ID: "/quit", Label: "/quit", Description: "Exit"}, {ID: "/q", Label: "/q", Description: "Exit"}} {
 		found := false
 		for _, existing := range autocomplete.Commands {
 			if existing.ID == item.ID {
@@ -734,6 +734,24 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 		}
 		ui.picker, ui.pickerKind = NewPicker("Select model", items), "model"
 		return true, nil
+	case "/variants", "/variant":
+		if len(parts) > 1 {
+			if err := ui.app.SetVariant(parts[1]); err != nil {
+				return true, err
+			}
+			fmt.Fprintln(ui.out, "Active variant:", ui.app.VariantName())
+			return true, nil
+		}
+		variants, err := ui.app.Variants(ctx)
+		if err != nil {
+			return true, err
+		}
+		items := make([]PickerItem, 0, len(variants))
+		for _, variant := range variants {
+			items = append(items, PickerItem{ID: variant, Label: variant})
+		}
+		ui.picker, ui.pickerKind = NewPicker("Select variant", items), "variant"
+		return true, nil
 	case "/agent", "/agents":
 		if len(parts) < 2 {
 			ui.picker, ui.pickerKind = NewPicker("Select agent", []PickerItem{{ID: "build", Label: "build", Description: "Implement changes and run tools"}, {ID: "plan", Label: "plan", Description: "Inspect the project and propose a plan"}}), "agent"
@@ -837,6 +855,10 @@ func (ui *UI) selectPicker(_ context.Context) error {
 	switch kind {
 	case "model":
 		if err := ui.app.SetModel(item.ID); err != nil {
+			return err
+		}
+	case "variant":
+		if err := ui.app.SetVariant(item.ID); err != nil {
 			return err
 		}
 	case "agent":
@@ -957,7 +979,11 @@ func (ui *UI) draw() {
 		}
 	}
 	fmt.Fprintln(ui.out, strings.Repeat("─", 72))
-	fmt.Fprintf(ui.out, "agent: %s  |  model: %s  |  /help /models /agents /sessions /new /editor /exit\n", ui.app.AgentName(), ui.app.ModelName())
+	fmt.Fprintf(ui.out, "agent: %s  |  model: %s", ui.app.AgentName(), ui.app.ModelName())
+	if variant := ui.app.VariantName(); variant != "" {
+		fmt.Fprintf(ui.out, "  |  variant: %s", variant)
+	}
+	fmt.Fprintln(ui.out, "  |  /help /models /variants /agents /sessions /new /editor /exit")
 	if ui.editor != nil {
 		fmt.Fprintf(ui.out, "> %s", editorWithCaret(ui.editor))
 	} else {
