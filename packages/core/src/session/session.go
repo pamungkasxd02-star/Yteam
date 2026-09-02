@@ -32,13 +32,18 @@ type Message struct {
 	CreatedAt    string               `json:"created_at"`
 }
 type Session struct {
-	ID        string       `json:"id"`
-	Title     string       `json:"title"`
-	Directory string       `json:"directory"`
-	CreatedAt string       `json:"created_at"`
-	UpdatedAt string       `json:"updated_at"`
-	Messages  []Message    `json:"-"`
-	Revert    *RevertState `json:"revert,omitempty"`
+	ID            string       `json:"id"`
+	Title         string       `json:"title"`
+	Directory     string       `json:"directory"`
+	CreatedAt     string       `json:"created_at"`
+	UpdatedAt     string       `json:"updated_at"`
+	RunStatus     string       `json:"run_status,omitempty"`
+	RunAttempt    int          `json:"run_attempt,omitempty"`
+	RunError      string       `json:"run_error,omitempty"`
+	RunStartedAt  string       `json:"run_started_at,omitempty"`
+	RunFinishedAt string       `json:"run_finished_at,omitempty"`
+	Messages      []Message    `json:"-"`
+	Revert        *RevertState `json:"revert,omitempty"`
 }
 
 type RevertState struct {

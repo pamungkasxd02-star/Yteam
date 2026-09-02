@@ -12,6 +12,7 @@ type RetryOptions struct {
 	Factor   float64
 	MaxDelay time.Duration
 	RetryIf  func(error) bool
+	OnRetry  func(attempt int, err error)
 }
 
 func Retry(ctx context.Context, fn func() error, options RetryOptions) error {
@@ -38,6 +39,9 @@ func Retry(ctx context.Context, fn func() error, options RetryOptions) error {
 			last = err
 			if attempt == options.Attempts-1 || !options.RetryIf(err) {
 				return err
+			}
+			if options.OnRetry != nil {
+				options.OnRetry(attempt+1, err)
 			}
 		}
 		delay := time.Duration(float64(options.Delay) * pow(options.Factor, attempt))

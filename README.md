@@ -100,6 +100,11 @@ can include variants and token pricing; completion usage is exposed through
 `/api/provider/usage`. The default Zen public marker is only sent in memory.
 Secrets are not committed or written to the repository.
 
+Session metadata records the current run lifecycle (`busy`, `retrying`,
+`completed`, `failed`, or `interrupted`) together with retry/error and timing
+information. The same transitions are emitted as durable events for API/SSE
+clients and the terminal transcript reducer.
+
 The verified portable build targets are Windows, Linux amd64, and macOS amd64.
 Use `go test -p 1 ./...` on constrained Windows/386 environments to avoid
 parallel compiler pagefile pressure.

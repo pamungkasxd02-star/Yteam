@@ -27,3 +27,27 @@ func TestTranscriptReducerAppliesMessageMetadata(t *testing.T) {
 		t.Fatalf("messages = %#v", reducer.Messages)
 	}
 }
+
+func TestTranscriptReducerAppliesRunLifecycle(t *testing.T) {
+	reducer := NewTranscriptReducer()
+	reducer.Apply(schema.Event{Type: schema.EventRunStarted})
+	if reducer.Status != "busy" {
+		t.Fatalf("started status = %q", reducer.Status)
+	}
+	reducer.Apply(schema.Event{Type: schema.EventRunRetrying})
+	if reducer.Status != "retrying" {
+		t.Fatalf("retry status = %q", reducer.Status)
+	}
+	reducer.Apply(schema.Event{Type: schema.EventRunCompleted})
+	if reducer.Status != "idle" {
+		t.Fatalf("completed status = %q", reducer.Status)
+	}
+	reducer.Apply(schema.Event{Type: schema.EventRunFailed})
+	if reducer.Status != "failed" {
+		t.Fatalf("failed status = %q", reducer.Status)
+	}
+	reducer.Apply(schema.Event{Type: schema.EventRunInterrupted})
+	if reducer.Status != "interrupted" {
+		t.Fatalf("interrupted status = %q", reducer.Status)
+	}
+}

@@ -30,6 +30,7 @@ func (r *Runner) Run(ctx context.Context, sess *session.Session, model, system s
 type RunOptions struct {
 	OnText      func(string)
 	OnDelta     func(protocol.StreamDelta)
+	OnRetry     func(int, error)
 	OnToolStart func(schema.ToolCall)
 	OnTool      func(schema.ToolCall, string, error)
 }
@@ -53,7 +54,7 @@ func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, mode
 		var usage *protocol.Usage
 		responseModel := ""
 		finishReason := ""
-		err := r.Provider.CompleteRetry(ctx, protocol.ChatRequest{Model: model, Messages: messages, Tools: r.toolDefinitions()}, func(delta protocol.StreamDelta) error {
+		err := r.Provider.CompleteRetryWithStatus(ctx, protocol.ChatRequest{Model: model, Messages: messages, Tools: r.toolDefinitions()}, func(delta protocol.StreamDelta) error {
 			if delta.Content != "" {
 				text.WriteString(delta.Content)
 				if options.OnText != nil {
@@ -79,7 +80,7 @@ func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, mode
 				options.OnDelta(delta)
 			}
 			return nil
-		})
+		}, options.OnRetry)
 		if err != nil {
 			return err
 		}

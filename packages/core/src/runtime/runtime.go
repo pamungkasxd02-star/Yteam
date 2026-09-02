@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -407,6 +408,13 @@ func (r *Runtime) InterruptSession(sessionID string) {
 	if r.Coordinator != nil {
 		_ = r.Coordinator.Interrupt(context.Background(), sessionID)
 	}
+	if current, err := r.Store.SetRunState(sessionID, session.RunInterrupted, 0, context.Canceled.Error()); err == nil {
+		r.mu.Lock()
+		if r.Session != nil && r.Session.ID == sessionID {
+			r.Session = current
+		}
+		r.mu.Unlock()
+	}
 }
 
 func (r *Runtime) CurrentSession() session.Session {
@@ -730,6 +738,16 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 		return err
 	}
 	current.Messages = append(current.Messages, user)
+	if next, stateErr := r.Store.SetRunState(current.ID, session.RunBusy, 0, ""); stateErr == nil {
+		current.RunStatus = next.RunStatus
+		current.RunAttempt = next.RunAttempt
+		current.RunError = next.RunError
+		current.RunStartedAt = next.RunStartedAt
+		current.RunFinishedAt = next.RunFinishedAt
+	}
+	if r.Events != nil {
+		_, _ = r.Events.Publish(ctx, schema.EventRunStarted, current.ID, map[string]any{"status": session.RunBusy})
+	}
 	options := runner.RunOptions{OnText: func(value string) {
 		_, _ = io.WriteString(out, value)
 		if r.Events != nil {
@@ -759,6 +777,8 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 		if len(data) > 0 {
 			_, _ = r.Events.Publish(ctx, schema.EventMessageMetadata, current.ID, data)
 		}
+	}, OnRetry: func(attempt int, retryErr error) {
+		r.setRunState(ctx, current, session.RunRetrying, attempt, errorText(retryErr))
 	}, OnTool: func(call schema.ToolCall, result string, err error) {
 		if r.Events != nil {
 			_, _ = r.Events.Publish(ctx, schema.EventToolFinished, current.ID, map[string]any{"name": call.Name, "error": errorText(err)})
@@ -784,13 +804,41 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 		delete(r.cancelRuns, current.ID)
 		r.runMu.Unlock()
 	}()
-	if err := r.Coordinator.Run(runCtx, current.ID, func(runCtx context.Context) error {
+	runErr := r.Coordinator.Run(runCtx, current.ID, func(runCtx context.Context) error {
 		return r.Runner.RunWithOptions(runCtx, current, r.ModelName(), r.SystemPrompt(), options)
-	}); err != nil {
-		return err
+	})
+	if runErr != nil {
+		state := session.RunFailed
+		if errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
+			state = session.RunInterrupted
+		}
+		r.setRunState(ctx, current, state, 0, runErr.Error())
+		return runErr
 	}
+	r.setRunState(ctx, current, session.RunCompleted, 0, "")
 	_, err = io.WriteString(out, "\n")
 	return err
+}
+
+func (r *Runtime) setRunState(ctx context.Context, current *session.Session, status string, attempt int, runErr string) {
+	if next, err := r.Store.SetRunState(current.ID, status, attempt, runErr); err == nil {
+		current.RunStatus, current.RunAttempt, current.RunError = next.RunStatus, next.RunAttempt, next.RunError
+		current.RunStartedAt, current.RunFinishedAt = next.RunStartedAt, next.RunFinishedAt
+	}
+	if r.Events == nil {
+		return
+	}
+	typ := schema.EventRunCompleted
+	if status == session.RunRetrying {
+		typ = schema.EventRunRetrying
+	}
+	if status == session.RunFailed {
+		typ = schema.EventRunFailed
+	}
+	if status == session.RunInterrupted {
+		typ = schema.EventRunInterrupted
+	}
+	_, _ = r.Events.Publish(ctx, typ, current.ID, map[string]any{"status": status, "attempt": attempt, "error": runErr})
 }
 func (r *Runtime) Help(out io.Writer) {
 	fmt.Fprintln(out, "Perintah YTEAM:")

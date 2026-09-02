@@ -41,6 +41,16 @@ func (r *TranscriptReducer) Apply(event schema.Event) {
 	case schema.EventPromptAdmitted:
 		r.Messages = append(r.Messages, LiveMessage{Role: "user", Content: stringValue(event.Data["content"])})
 		r.Status = "running"
+	case schema.EventRunStarted:
+		r.Status = "busy"
+	case schema.EventRunRetrying:
+		r.Status = "retrying"
+	case schema.EventRunCompleted:
+		r.Status = "idle"
+	case schema.EventRunFailed:
+		r.Status = "failed"
+	case schema.EventRunInterrupted:
+		r.Status = "interrupted"
 	case schema.EventTextDelta:
 		text := stringValue(event.Data["content"])
 		if text == "" {

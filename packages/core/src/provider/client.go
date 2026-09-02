@@ -212,6 +212,10 @@ func (c *Client) recordUsage(requestModel, responseModel string, usage *protocol
 func (c *Client) CompleteRetry(ctx context.Context, input protocol.ChatRequest, emit func(protocol.StreamDelta) error) error {
 	return util.Retry(ctx, func() error { return c.Complete(ctx, input, emit) }, util.RetryOptions{})
 }
+
+func (c *Client) CompleteRetryWithStatus(ctx context.Context, input protocol.ChatRequest, emit func(protocol.StreamDelta) error, onRetry func(int, error)) error {
+	return util.Retry(ctx, func() error { return c.Complete(ctx, input, emit) }, util.RetryOptions{OnRetry: onRetry})
+}
 func (c *Client) headers(req *http.Request) {
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)

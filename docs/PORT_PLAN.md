@@ -59,6 +59,9 @@ The Go foundation currently has working implementations and tests for:
   multiline-data, close, and EOF handling;
 - durable message metadata and typed parts for reasoning, model, usage,
   finish state, tool calls, and tool results, including live event projection;
+- durable per-session run lifecycle with `busy`, `retrying`, `completed`,
+  `failed`, and `interrupted` state, timestamps, retry attempts, and terminal
+  events consumed by TUI/server projections;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
