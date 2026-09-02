@@ -45,6 +45,7 @@ type UI struct {
 	viewport      *Viewport
 	autocomplete  *Autocomplete
 	keymap        *Keymap
+	clipboardRead func() (string, error)
 	promptBusy    bool
 	promptDone    chan error
 	promptHistory *PromptHistory
@@ -85,7 +86,7 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	history, _ := OpenPromptHistory(app.Config.Home)
 	stash, _ := OpenPromptStash(app.Config.Home)
 	keymap, _ := LoadKeymap(app.Config.Home)
-	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, keymap: keymap, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1), promptHistory: history, promptStash: stash, viewport: NewViewport(80, 18)}
+	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, keymap: keymap, clipboardRead: readSystemClipboard, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1), promptHistory: history, promptStash: stash, viewport: NewViewport(80, 18)}
 }
 
 func (ui *UI) Run(ctx context.Context) error {
@@ -256,6 +257,10 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 		case KeyStash:
 			if err := ui.stashCurrentPrompt(); err != nil {
 				fmt.Fprintln(ui.out, "stash error:", err)
+			}
+		case KeyClipboardPaste:
+			if err := ui.pasteFromClipboard(); err != nil {
+				fmt.Fprintln(ui.out, "paste error:", err)
 			}
 		case KeyOpenEditor:
 			value, editorErr := ui.openEditor(ctx, terminal, ui.editor.String())
@@ -495,6 +500,18 @@ func (ui *UI) insertPaste(value string) {
 	})
 	ui.resetPromptHistoryNavigation()
 	ui.refreshAutocomplete()
+}
+
+func (ui *UI) pasteFromClipboard() error {
+	if ui.clipboardRead == nil {
+		return fmt.Errorf("clipboard reader is not configured")
+	}
+	value, err := ui.clipboardRead()
+	if err != nil {
+		return err
+	}
+	ui.insertPaste(value)
+	return nil
 }
 
 func (ui *UI) insertEditorText(value string) {

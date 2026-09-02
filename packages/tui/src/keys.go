@@ -38,6 +38,7 @@ const (
 	KeyStash
 	KeyClear
 	KeyCtrlL
+	KeyClipboardPaste
 )
 
 type Key struct {
@@ -107,6 +108,10 @@ func (r *KeyReader) ReadKey() (Key, error) {
 	if data[0] == 12 {
 		r.pending = data[1:]
 		return Key{Kind: KeyCtrlL}, nil
+	}
+	if data[0] == 22 {
+		r.pending = data[1:]
+		return Key{Kind: KeyClipboardPaste}, nil
 	}
 	if data[0] == 23 {
 		r.pending = data[1:]

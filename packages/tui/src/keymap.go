@@ -27,6 +27,7 @@ const (
 	ActionEditor             Action = "prompt.editor"
 	ActionStash              Action = "prompt.stash"
 	ActionClear              Action = "prompt.clear"
+	ActionPaste              Action = "input.paste"
 )
 
 type KeymapConfig struct {
@@ -55,6 +56,7 @@ func DefaultKeymap() *Keymap {
 		ActionEditor:             "ctrl+e",
 		ActionStash:              "none",
 		ActionClear:              "ctrl+c",
+		ActionPaste:              "ctrl+v",
 	}}
 }
 
@@ -133,6 +135,7 @@ func (k *Keymap) Normalize(key Key) Key {
 		{ActionEditor, KeyOpenEditor},
 		{ActionStash, KeyStash},
 		{ActionClear, KeyClear},
+		{ActionPaste, KeyClipboardPaste},
 		{ActionExit, KeyCtrlC},
 	}
 	for _, item := range items {
@@ -181,6 +184,8 @@ func keyBindingMatches(key Key, binding string) bool {
 		return key.Kind == KeyCtrlC
 	case "ctrl+l":
 		return key.Kind == KeyCtrlL
+	case "ctrl+v":
+		return key.Kind == KeyClipboardPaste
 	case "none":
 		return false
 	case "ctrl+q":
