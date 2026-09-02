@@ -27,6 +27,8 @@ The Go foundation currently has working implementations and tests for:
 - OpenAI-compatible streaming, including streamed tool-call aggregation;
 - per-session agent runner and single-run coordinator;
 - durable sessions with rename, fork, delete, compact, and export;
+- retry helper for transient provider failures and session compaction/revert
+  lifecycle metadata;
 - event journal with aggregate sequences and session replay;
 - permission allow/deny/ask plus once/always/reject waiting;
 - project-safe read/list/glob/grep/write/edit/bash tools;
@@ -43,6 +45,11 @@ The Go foundation currently has working implementations and tests for:
 
 Full UI parity and every OpenCode integration are still future layers. A
 package directory or README is not counted as a completed implementation.
+
+Revert currently preserves the OpenCode state contract and lifecycle endpoints
+(`stage`, `clear`, `commit`). Actual file restoration requires the separate
+OpenCode Snapshot service and is intentionally not represented as a fake
+implementation.
 
 ## Explicit non-goals
 

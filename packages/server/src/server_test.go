@@ -82,6 +82,38 @@ func TestSessionListAndExport(t *testing.T) {
 	}
 }
 
+func TestCompactAndRevertEndpoints(t *testing.T) {
+	s := testServer(t, "")
+	id := s.Runtime.CurrentSession().ID
+	if err := s.Runtime.Store.Append(id, session.Message{Role: "user", Content: "change"}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := s.Runtime.Store.Load(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	messageID := loaded.Messages[0].ID
+	handler := s.Handler()
+	r := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/session/"+id+"/revert/stage", strings.NewReader(`{"message_id":"`+messageID+`","diff":"diff"}`))
+	handler.ServeHTTP(r, req)
+	if r.Code != http.StatusOK || !strings.Contains(r.Body.String(), messageID) {
+		t.Fatalf("stage = %d %s", r.Code, r.Body.String())
+	}
+	r = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/session/"+id+"/revert/clear", nil)
+	handler.ServeHTTP(r, req)
+	if r.Code != http.StatusOK || strings.Contains(r.Body.String(), `"revert"`) {
+		t.Fatalf("clear = %d %s", r.Code, r.Body.String())
+	}
+	r = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/session/"+id+"/compact", strings.NewReader(`{"summary":"keep this","keep":1}`))
+	handler.ServeHTTP(r, req)
+	if r.Code != http.StatusOK || !strings.Contains(r.Body.String(), "keep this") {
+		t.Fatalf("compact = %d %s", r.Code, r.Body.String())
+	}
+}
+
 func TestInputAdmissionAndPromotionAreSeparate(t *testing.T) {
 	s := testServer(t, "")
 	id := s.Runtime.CurrentSession().ID

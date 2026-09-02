@@ -54,6 +54,10 @@ Interactive commands include `/models`, `/model <id>`, `/agents`,
 `/agent <name>`, `/sessions`, `/new`, `/fork`, `/rename <title>`, and
 `/export [md|json]`.
 
+Session API lifecycle also includes compaction and revert state. Revert metadata
+is preserved exactly as a lifecycle state; file restoration is deferred until
+the OpenCode Snapshot service is ported.
+
 The interactive terminal uses raw ANSI/UTF-8 input when attached to a TTY:
 multiline text uses `Ctrl+J`, history uses `Up`/`Down`, pickers support
 `Up`/`Down`/`Enter`/`Esc`, and permission prompts accept `y` (once), `a`

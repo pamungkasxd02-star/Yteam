@@ -17,6 +17,7 @@ import (
 )
 
 type Message struct {
+	ID         string            `json:"id"`
 	Role       string            `json:"role"`
 	Content    string            `json:"content"`
 	Name       string            `json:"name,omitempty"`
@@ -25,12 +26,19 @@ type Message struct {
 	CreatedAt  string            `json:"created_at"`
 }
 type Session struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Directory string    `json:"directory"`
-	CreatedAt string    `json:"created_at"`
-	UpdatedAt string    `json:"updated_at"`
-	Messages  []Message `json:"-"`
+	ID        string       `json:"id"`
+	Title     string       `json:"title"`
+	Directory string       `json:"directory"`
+	CreatedAt string       `json:"created_at"`
+	UpdatedAt string       `json:"updated_at"`
+	Messages  []Message    `json:"-"`
+	Revert    *RevertState `json:"revert,omitempty"`
+}
+
+type RevertState struct {
+	MessageID string `json:"message_id"`
+	Diff      string `json:"diff,omitempty"`
+	Snapshot  string `json:"snapshot,omitempty"`
 }
 type Store struct {
 	sessions, directory string
@@ -75,6 +83,12 @@ func (s *Store) Load(id string) (*Session, error) {
 		return nil, err
 	}
 	sess.Messages, err = s.readMessages(id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.ensureMessageIDs(&sess); err != nil {
+		return nil, err
+	}
 	return &sess, err
 }
 
@@ -121,6 +135,9 @@ func (s *Store) Append(id string, message Message) error {
 	defer s.mu.Unlock()
 	if message.CreatedAt == "" {
 		message.CreatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	if message.ID == "" {
+		message.ID = newMessageID()
 	}
 	file, err := os.OpenFile(filepath.Join(s.sessions, id+".jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -193,4 +210,47 @@ func title(value string) string {
 		return value[:80] + "…"
 	}
 	return value
+}
+
+func newMessageID() string {
+	buf := make([]byte, 12)
+	if _, err := rand.Read(buf); err != nil {
+		return "msg_unknown"
+	}
+	return "msg_" + hex.EncodeToString(buf)
+}
+
+func NewMessageID() string { return newMessageID() }
+
+func (s *Store) ensureMessageIDs(sess *Session) error {
+	changed := false
+	for index := range sess.Messages {
+		if sess.Messages[index].ID != "" {
+			continue
+		}
+		sess.Messages[index].ID = newMessageID()
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	return s.rewriteMessages(sess.ID, sess.Messages)
+}
+
+func (s *Store) rewriteMessages(id string, messages []Message) error {
+	if err := validID(id); err != nil {
+		return err
+	}
+	path := filepath.Join(s.sessions, id+".jsonl")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	for _, message := range messages {
+		if err := json.NewEncoder(file).Encode(message); err != nil {
+			return err
+		}
+	}
+	return nil
 }

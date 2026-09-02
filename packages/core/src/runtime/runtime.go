@@ -408,6 +408,64 @@ func (r *Runtime) ForkSession() (*session.Session, error) {
 	return next, nil
 }
 
+func (r *Runtime) CompactSession(summary string, keep int) (*session.Compaction, error) {
+	current := r.CurrentSession()
+	compaction, err := r.Store.CompactMessages(current.ID, summary, keep)
+	if err != nil {
+		return nil, err
+	}
+	next, err := r.Store.Load(current.ID)
+	if err != nil {
+		return nil, err
+	}
+	r.SwitchSession(next)
+	if r.Events != nil {
+		_, _ = r.Events.Publish(context.Background(), schema.EventCompactionEnded, current.ID, map[string]any{"summary": compaction.Summary})
+	}
+	return compaction, nil
+}
+
+func (r *Runtime) StageRevert(messageID, diff string) (*session.Session, error) {
+	current := r.CurrentSession()
+	next, err := r.Store.StageRevert(current.ID, messageID, diff)
+	if err != nil {
+		return nil, err
+	}
+	r.SwitchSession(next)
+	if r.Events != nil {
+		_, _ = r.Events.Publish(context.Background(), schema.EventRevertStaged, current.ID, map[string]any{"message_id": messageID, "diff": diff})
+	}
+	return next, nil
+}
+func (r *Runtime) ClearRevert() (*session.Session, error) {
+	current := r.CurrentSession()
+	next, err := r.Store.ClearRevert(current.ID)
+	if err != nil {
+		return nil, err
+	}
+	r.SwitchSession(next)
+	if r.Events != nil {
+		_, _ = r.Events.Publish(context.Background(), schema.EventRevertCleared, current.ID, nil)
+	}
+	return next, nil
+}
+func (r *Runtime) CommitRevert() (*session.Session, error) {
+	current := r.CurrentSession()
+	messageID := ""
+	if current.Revert != nil {
+		messageID = current.Revert.MessageID
+	}
+	next, err := r.Store.CommitRevert(current.ID)
+	if err != nil {
+		return nil, err
+	}
+	r.SwitchSession(next)
+	if r.Events != nil {
+		_, _ = r.Events.Publish(context.Background(), schema.EventRevertCommitted, current.ID, map[string]any{"message_id": messageID})
+	}
+	return next, nil
+}
+
 // Command handles the local command subset shared by the REPL and non-TUI CLI.
 // A command is handled locally when it starts with '/', so it never consumes
 // provider quota by accident.
@@ -534,7 +592,7 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 	if _, _, err := r.Inputs.PromoteByID(input.ID); err != nil {
 		return err
 	}
-	user := session.Message{Role: "user", Content: text}
+	user := session.Message{ID: session.NewMessageID(), Role: "user", Content: text}
 	if err := r.Store.Append(current.ID, user); err != nil {
 		return err
 	}

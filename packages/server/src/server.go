@@ -184,6 +184,62 @@ func (s *Server) sessionRoute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"session_id": current.ID, "messages": current.Messages})
 		return
 	}
+	if len(parts) == 2 && parts[1] == "compact" && r.Method == http.MethodPost {
+		var input struct {
+			Summary string `json:"summary"`
+			Keep    int    `json:"keep"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		result, err := s.Runtime.CompactSession(input.Summary, input.Keep)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+	if len(parts) == 2 && parts[1] == "revert" && r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, current.Revert)
+		return
+	}
+	if len(parts) == 3 && parts[1] == "revert" && parts[2] == "stage" && r.Method == http.MethodPost {
+		var input struct {
+			MessageID string `json:"message_id"`
+			Diff      string `json:"diff"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+		next, err := s.Runtime.StageRevert(input.MessageID, input.Diff)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, next.Revert)
+		return
+	}
+	if len(parts) == 3 && parts[1] == "revert" && parts[2] == "clear" && r.Method == http.MethodPost {
+		next, err := s.Runtime.ClearRevert()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, next)
+		return
+	}
+	if len(parts) == 3 && parts[1] == "revert" && parts[2] == "commit" && r.Method == http.MethodPost {
+		next, err := s.Runtime.CommitRevert()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, next)
+		return
+	}
 	if len(parts) == 2 && parts[1] == "history" && r.Method == http.MethodGet {
 		writeJSON(w, http.StatusOK, map[string]any{"session_id": current.ID, "messages": current.Messages})
 		return

@@ -48,7 +48,7 @@ func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, mode
 		}
 		var text strings.Builder
 		var calls []schema.ToolCall
-		err := r.Provider.Complete(ctx, protocol.ChatRequest{Model: model, Messages: messages, Tools: r.toolDefinitions()}, func(delta protocol.StreamDelta) error {
+		err := r.Provider.CompleteRetry(ctx, protocol.ChatRequest{Model: model, Messages: messages, Tools: r.toolDefinitions()}, func(delta protocol.StreamDelta) error {
 			if delta.Content != "" {
 				text.WriteString(delta.Content)
 				if options.OnText != nil {
@@ -64,7 +64,7 @@ func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, mode
 			return err
 		}
 		if text.Len() > 0 || len(calls) > 0 {
-			assistant := session.Message{Role: "assistant", Content: text.String(), ToolCalls: calls}
+			assistant := session.Message{ID: session.NewMessageID(), Role: "assistant", Content: text.String(), ToolCalls: calls}
 			if err := r.appendMessage(sess, assistant); err != nil {
 				return err
 			}
@@ -98,7 +98,7 @@ func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, mode
 			if errs[index] != nil {
 				content = "tool error: " + errs[index].Error()
 			}
-			if err := r.appendMessage(sess, session.Message{Role: "tool", ToolCallID: call.ID, Name: call.Name, Content: content}); err != nil {
+			if err := r.appendMessage(sess, session.Message{ID: session.NewMessageID(), Role: "tool", ToolCallID: call.ID, Name: call.Name, Content: content}); err != nil {
 				return err
 			}
 		}

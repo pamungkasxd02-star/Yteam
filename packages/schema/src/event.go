@@ -24,4 +24,8 @@ const (
 	EventQuestionAsked    = "question.asked"
 	EventQuestionReplied  = "question.replied"
 	EventQuestionRejected = "question.rejected"
+	EventCompactionEnded  = "compaction.ended"
+	EventRevertStaged     = "revert.staged"
+	EventRevertCleared    = "revert.cleared"
+	EventRevertCommitted  = "revert.committed"
 )

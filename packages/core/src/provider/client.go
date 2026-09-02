@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pamungkasxd02-star/Yteam/packages/core/src/util"
 	"github.com/pamungkasxd02-star/Yteam/packages/protocol/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/schema/src"
 )
@@ -166,6 +167,10 @@ func (c *Client) Complete(ctx context.Context, input protocol.ChatRequest, emit 
 		return emit(protocol.StreamDelta{ToolCalls: calls})
 	}
 	return nil
+}
+
+func (c *Client) CompleteRetry(ctx context.Context, input protocol.ChatRequest, emit func(protocol.StreamDelta) error) error {
+	return util.Retry(ctx, func() error { return c.Complete(ctx, input, emit) }, util.RetryOptions{})
 }
 func (c *Client) headers(req *http.Request) {
 	if c.apiKey != "" {
