@@ -55,3 +55,31 @@ func TestKeyReaderMapsLineFeedToNewline(t *testing.T) {
 		t.Fatalf("key = %#v, err = %v", key, err)
 	}
 }
+
+func TestKeyReaderDecodesPageMovementAndBareEscape(t *testing.T) {
+	reader := NewKeyReader(strings.NewReader("\x1b[5~\x1b[6~\x1b"))
+	key, err := reader.ReadKey()
+	if err != nil || key.Kind != KeyPageUp {
+		t.Fatalf("page up = %#v, %v", key, err)
+	}
+	key, err = reader.ReadKey()
+	if err != nil || key.Kind != KeyPageDown {
+		t.Fatalf("page down = %#v, %v", key, err)
+	}
+	key, err = reader.ReadKey()
+	if err != nil || key.Kind != KeyEscape {
+		t.Fatalf("escape = %#v, %v", key, err)
+	}
+}
+
+func TestKeyReaderDecodesBracketedPaste(t *testing.T) {
+	reader := NewKeyReader(strings.NewReader("\x1b[200~hello\n世界\x1b[201~x"))
+	key, err := reader.ReadKey()
+	if err != nil || key.Kind != KeyPaste || key.Text != "hello\n世界" {
+		t.Fatalf("paste = %#v, %v", key, err)
+	}
+	key, err = reader.ReadKey()
+	if err != nil || key.Kind != KeyText || key.Text != "x" {
+		t.Fatalf("after paste = %#v, %v", key, err)
+	}
+}

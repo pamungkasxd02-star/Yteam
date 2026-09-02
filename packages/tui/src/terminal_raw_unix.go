@@ -13,7 +13,7 @@ func enableRaw(file *os.File) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := terminalCommand(file, "-icanon", "-echo"); err != nil {
+	if _, err := terminalCommand(file, "-icanon", "-echo", "-isig"); err != nil {
 		return nil, err
 	}
 	return func() { _, _ = terminalCommand(file, state) }, nil

@@ -1,6 +1,14 @@
 package tui
 
-import "strings"
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
 
 type Editor struct {
 	value         []rune
@@ -29,23 +37,25 @@ func (e *Editor) Backspace() {
 	if e.cursor == 0 {
 		return
 	}
-	e.value = append(e.value[:e.cursor-1], e.value[e.cursor:]...)
-	e.cursor--
+	start := previousClusterStart(e.value, e.cursor)
+	e.value = append(e.value[:start], e.value[e.cursor:]...)
+	e.cursor = start
 }
 func (e *Editor) Delete() {
 	if e.cursor >= len(e.value) {
 		return
 	}
-	e.value = append(e.value[:e.cursor], e.value[e.cursor+1:]...)
+	end := nextClusterEnd(e.value, e.cursor)
+	e.value = append(e.value[:e.cursor], e.value[end:]...)
 }
 func (e *Editor) Left() {
 	if e.cursor > 0 {
-		e.cursor--
+		e.cursor = previousClusterStart(e.value, e.cursor)
 	}
 }
 func (e *Editor) Right() {
 	if e.cursor < len(e.value) {
-		e.cursor++
+		e.cursor = nextClusterEnd(e.value, e.cursor)
 	}
 }
 func (e *Editor) Home() { e.cursor = lineStart(e.value, e.cursor) }
@@ -89,16 +99,119 @@ func (e *Editor) HistoryDown() bool {
 	return true
 }
 
+// openExternalEditor implements OpenCode's VISUAL/EDITOR prompt flow. The
+// caller owns terminal suspension/restoration around this operation.
+func openExternalEditor(ctx context.Context, value, cwd string, stdin io.Reader, stdout, stderr io.Writer) (string, error) {
+	editor := firstNonEmpty(os.Getenv("VISUAL"), os.Getenv("EDITOR"))
+	if editor == "" {
+		return "", fmt.Errorf("VISUAL or EDITOR is not set")
+	}
+	temporary, err := os.CreateTemp("", "yteam-prompt-*.md")
+	if err != nil {
+		return "", err
+	}
+	path := temporary.Name()
+	defer os.Remove(path)
+	if _, err := temporary.WriteString(value); err != nil {
+		_ = temporary.Close()
+		return "", err
+	}
+	if err := temporary.Close(); err != nil {
+		return "", err
+	}
+	args, err := splitEditorCommand(editor)
+	if err != nil {
+		return "", err
+	}
+	command := exec.CommandContext(ctx, args[0], append(args[1:], path)...)
+	if cwd != "" {
+		if resolved, resolveErr := filepath.Abs(cwd); resolveErr == nil {
+			if info, statErr := os.Stat(resolved); statErr == nil && info.IsDir() {
+				command.Dir = resolved
+			}
+		}
+	}
+	command.Stdin, command.Stdout, command.Stderr = stdin, stdout, stderr
+	if err := command.Run(); err != nil {
+		return "", err
+	}
+	result, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(result), nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func splitEditorCommand(value string) ([]string, error) {
+	var parts []string
+	var current strings.Builder
+	var quote rune
+	escaped := false
+	flush := func() {
+		if current.Len() > 0 {
+			parts = append(parts, current.String())
+			current.Reset()
+		}
+	}
+	for _, char := range value {
+		if escaped {
+			current.WriteRune(char)
+			escaped = false
+			continue
+		}
+		if char == '\\' && quote != '\'' {
+			escaped = true
+			continue
+		}
+		if quote != 0 {
+			if char == quote {
+				quote = 0
+			} else {
+				current.WriteRune(char)
+			}
+			continue
+		}
+		switch char {
+		case '\'', '"':
+			quote = char
+		case ' ', '\t', '\r', '\n':
+			flush()
+		default:
+			current.WriteRune(char)
+		}
+	}
+	if escaped {
+		current.WriteRune('\\')
+	}
+	if quote != 0 {
+		return nil, fmt.Errorf("unterminated quote in editor command")
+	}
+	flush()
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("empty editor command")
+	}
+	return parts, nil
+}
+
 func (e *Editor) moveLine(direction int) {
 	start := lineStart(e.value, e.cursor)
-	column := e.cursor - start
+	column := clusterColumn(e.value, start, e.cursor)
 	if direction < 0 {
 		if start == 0 {
 			return
 		}
 		previousEnd := start - 1
 		previousStart := lineStart(e.value, previousEnd)
-		e.cursor = previousStart + min(column, previousEnd-previousStart)
+		e.cursor = lineColumnCursor(e.value, previousStart, previousEnd, column)
 		return
 	}
 	end := lineEnd(e.value, e.cursor)
@@ -107,7 +220,31 @@ func (e *Editor) moveLine(direction int) {
 	}
 	nextStart := end + 1
 	nextEnd := lineEnd(e.value, nextStart)
-	e.cursor = nextStart + min(column, nextEnd-nextStart)
+	e.cursor = lineColumnCursor(e.value, nextStart, nextEnd, column)
+}
+
+func clusterColumn(value []rune, start, cursor int) int {
+	column := 0
+	for _, unit := range textUnits(value[start:cursor]) {
+		column += unit.Width
+	}
+	return column
+}
+
+func lineColumnCursor(value []rune, start, end, column int) int {
+	if column <= 0 {
+		return start
+	}
+	for _, unit := range textUnits(value[start:end]) {
+		if column < unit.Width {
+			return start + unit.Start
+		}
+		if column == unit.Width {
+			return start + unit.End
+		}
+		column -= unit.Width
+	}
+	return end
 }
 
 func lineStart(value []rune, cursor int) int {
@@ -121,6 +258,32 @@ func lineEnd(value []rune, cursor int) int {
 		cursor++
 	}
 	return cursor
+}
+
+func previousClusterStart(value []rune, cursor int) int {
+	units := textUnits(value)
+	for index := len(units) - 1; index >= 0; index-- {
+		if units[index].End == cursor {
+			return units[index].Start
+		}
+	}
+	return max(0, cursor-1)
+}
+
+func nextClusterEnd(value []rune, cursor int) int {
+	for _, unit := range textUnits(value) {
+		if unit.Start == cursor {
+			return unit.End
+		}
+	}
+	return min(len(value), cursor+1)
+}
+
+func max(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }
 func min(left, right int) int {
 	if left < right {

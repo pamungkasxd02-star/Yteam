@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"io"
 	"unicode/utf8"
 )
@@ -23,6 +24,9 @@ const (
 	KeyCtrlC
 	KeyCtrlJ
 	KeyCtrlP
+	KeyPageUp
+	KeyPageDown
+	KeyPaste
 )
 
 type Key struct {
@@ -69,7 +73,9 @@ func (r *KeyReader) ReadKey() (Key, error) {
 	if data[0] == 27 {
 		if len(data) < 2 {
 			if err := r.readMore(2); err != nil {
-				return Key{}, err
+				// EOF after a lone escape is a valid bare Escape key.
+				r.pending = data[1:]
+				return Key{Kind: KeyEscape}, nil
 			}
 			data = r.pending
 		}
@@ -99,46 +105,7 @@ func (r *KeyReader) escape(data []byte) (Key, error) {
 		return Key{Kind: KeyEscape}, nil
 	}
 	if data[1] == '[' {
-		if len(data) < 3 {
-			if err := r.readMore(3); err != nil {
-				return Key{}, err
-			}
-			data = r.pending
-		}
-		if len(data) >= 3 {
-			switch data[2] {
-			case 'A':
-				r.pending = data[3:]
-				return Key{Kind: KeyUp}, nil
-			case 'B':
-				r.pending = data[3:]
-				return Key{Kind: KeyDown}, nil
-			case 'C':
-				r.pending = data[3:]
-				return Key{Kind: KeyRight}, nil
-			case 'D':
-				r.pending = data[3:]
-				return Key{Kind: KeyLeft}, nil
-			case 'H':
-				r.pending = data[3:]
-				return Key{Kind: KeyHome}, nil
-			case 'F':
-				r.pending = data[3:]
-				return Key{Kind: KeyEnd}, nil
-			}
-		}
-		if data[2] == '3' {
-			if len(data) < 4 {
-				if err := r.readMore(4); err != nil {
-					return Key{}, err
-				}
-				data = r.pending
-			}
-		}
-		if len(data) >= 4 && data[2] == '3' && data[3] == '~' {
-			r.pending = data[4:]
-			return Key{Kind: KeyDelete}, nil
-		}
+		return r.csi(data)
 	}
 	if data[1] == 'O' && len(data) >= 3 {
 		if data[2] == 'H' {
@@ -152,6 +119,63 @@ func (r *KeyReader) escape(data []byte) (Key, error) {
 	}
 	r.pending = data[1:]
 	return Key{Kind: KeyEscape}, nil
+}
+
+func (r *KeyReader) csi(data []byte) (Key, error) {
+	for {
+		if bytes.HasPrefix(data, []byte("\x1b[200~")) {
+			endMarker := []byte("\x1b[201~")
+			if end := bytes.Index(data[6:], endMarker); end >= 0 {
+				start := 6
+				end += start
+				text := string(data[start:end])
+				r.pending = data[end+len(endMarker):]
+				return Key{Kind: KeyPaste, Text: text}, nil
+			}
+			if err := r.readMore(len(data) + 1); err != nil {
+				text := data[6:]
+				// A truncated bracketed paste is still user input. Returning it
+				// is preferable to dropping the paste at EOF.
+				r.pending = nil
+				return Key{Kind: KeyPaste, Text: string(text)}, nil
+			}
+			data = r.pending
+			continue
+		}
+		for index := 2; index < len(data); index++ {
+			if data[index] < 0x40 || data[index] > 0x7e {
+				continue
+			}
+			sequence := data[2 : index+1]
+			r.pending = data[index+1:]
+			switch string(sequence) {
+			case "A":
+				return Key{Kind: KeyUp}, nil
+			case "B":
+				return Key{Kind: KeyDown}, nil
+			case "C":
+				return Key{Kind: KeyRight}, nil
+			case "D":
+				return Key{Kind: KeyLeft}, nil
+			case "H", "1~", "7~":
+				return Key{Kind: KeyHome}, nil
+			case "F", "4~", "8~":
+				return Key{Kind: KeyEnd}, nil
+			case "3~":
+				return Key{Kind: KeyDelete}, nil
+			case "5~":
+				return Key{Kind: KeyPageUp}, nil
+			case "6~":
+				return Key{Kind: KeyPageDown}, nil
+			}
+			return Key{Kind: KeyEscape}, nil
+		}
+		if err := r.readMore(len(data) + 1); err != nil {
+			r.pending = data[1:]
+			return Key{Kind: KeyEscape}, nil
+		}
+		data = r.pending
+	}
 }
 
 func (r *KeyReader) readMore(minimum int) error {

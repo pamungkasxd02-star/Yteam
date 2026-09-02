@@ -38,6 +38,8 @@ type UI struct {
 	editor        *Editor
 	reducer       *TranscriptReducer
 	redraw        chan struct{}
+	terminal      *os.File
+	viewport      *Viewport
 	autocomplete  *Autocomplete
 	promptBusy    bool
 	promptDone    chan error
@@ -58,7 +60,7 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	for _, item := range app.CommandList() {
 		autocomplete.Commands = append(autocomplete.Commands, PickerItem{ID: "/" + item.Name, Label: "/" + item.Name, Description: item.Description})
 	}
-	for _, item := range []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Choose a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/exit", Label: "/exit", Description: "Exit YTEAM"}} {
+	for _, item := range []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Choose a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/editor", Label: "/editor", Description: "Open external editor"}, {ID: "/exit", Label: "/exit", Description: "Exit YTEAM"}} {
 		found := false
 		for _, existing := range autocomplete.Commands {
 			if existing.ID == item.ID {
@@ -71,7 +73,7 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 		}
 	}
 	history, _ := OpenPromptHistory(app.Config.Home)
-	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1), promptHistory: history}
+	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1), promptHistory: history, viewport: NewViewport(80, 18)}
 }
 
 func (ui *UI) Run(ctx context.Context) error {
@@ -141,6 +143,9 @@ func (ui *UI) startEventWatcher(ctx context.Context) {
 }
 
 func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
+	ui.terminal = file
+	width, height := terminalSize(file)
+	ui.viewport.SetSize(width, height-6)
 	restore, err := enableRaw(file)
 	if err != nil {
 		return err
@@ -207,6 +212,10 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.editor.Insert(key.Text)
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
+		case KeyPaste:
+			ui.editor.Insert(key.Text)
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
 		case KeyCtrlJ:
 			ui.editor.Newline()
 			ui.resetPromptHistoryNavigation()
@@ -231,6 +240,19 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			}
 			if ui.promptBusy {
 				fmt.Fprintln(ui.out, "\nRun masih berjalan. Tekan Ctrl+C untuk membatalkan.")
+				ui.draw()
+				continue
+			}
+			if text == "/editor" {
+				value, newRestore, editorErr := ui.openEditor(ctx, file, restore, "")
+				if editorErr != nil {
+					fmt.Fprintln(ui.out, "editor error:", editorErr)
+				} else if value != "" {
+					ui.editor.Set(normalizePromptContent(value))
+				}
+				if newRestore != nil {
+					restore = newRestore
+				}
 				ui.draw()
 				continue
 			}
@@ -326,6 +348,12 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			} else {
 				ui.editor.Down()
 			}
+		case KeyPageUp, KeyPageDown:
+			if key.Kind == KeyPageUp {
+				ui.viewport.Page(-1)
+			} else {
+				ui.viewport.Page(1)
+			}
 		case KeyCtrlP:
 			if ui.promptHistory != nil {
 				if value, ok := ui.promptHistory.Move(-1, ui.editor.String()); ok {
@@ -363,8 +391,28 @@ func (ui *UI) isPromptCommand(text string) bool {
 	if len(parts) == 0 || !strings.HasPrefix(parts[0], "/") {
 		return false
 	}
-	_, ok := ui.app.Commands[strings.TrimPrefix(parts[0], "/")]
+	name := strings.TrimPrefix(parts[0], "/")
+	if name == "editor" {
+		return true
+	}
+	_, ok := ui.app.Commands[name]
 	return ok
+}
+
+func (ui *UI) openEditor(ctx context.Context, file *os.File, restore func(), value string) (string, func(), error) {
+	restore()
+	content, editorErr := openExternalEditor(ctx, value, ui.app.Root, file, ui.out, ui.out)
+	newRestore, rawErr := enableRaw(file)
+	if editorErr != nil {
+		if rawErr != nil {
+			return "", nil, fmt.Errorf("%w; terminal restore failed: %v", editorErr, rawErr)
+		}
+		return "", newRestore, editorErr
+	}
+	if rawErr != nil {
+		return "", nil, rawErr
+	}
+	return content, newRestore, nil
 }
 
 func (ui *UI) handleQuestionKey(ctx context.Context, key Key) bool {
@@ -741,6 +789,11 @@ func (ui *UI) draw() {
 	ui.mu.Lock()
 	defer ui.mu.Unlock()
 	fmt.Fprint(ui.out, "\033[2J\033[H")
+	if ui.viewport == nil {
+		ui.viewport = NewViewport(80, 18)
+	}
+	width, height := terminalSize(ui.terminal)
+	ui.viewport.SetSize(width, height-6)
 	if ui.route == RouteHome {
 		fmt.Fprintln(ui.out, "YTEAM  Home")
 		fmt.Fprintln(ui.out, "")
@@ -750,8 +803,13 @@ func (ui *UI) draw() {
 		current := ui.app.CurrentSession()
 		fmt.Fprintf(ui.out, "YTEAM  Session %s\n", current.ID)
 		fmt.Fprintln(ui.out, strings.Repeat("─", 72))
+		messages := make([]MessageView, 0, len(ui.transcript))
 		for _, message := range ui.transcript {
-			fmt.Fprintf(ui.out, "%s: %s\n\n", message.Role, message.Content)
+			messages = append(messages, MessageView{Role: message.Role, Content: message.Content})
+		}
+		ui.viewport.SetLines(transcriptLines(messages, ui.viewport.Width))
+		for _, line := range ui.viewport.Visible() {
+			fmt.Fprintln(ui.out, line)
 		}
 	}
 	if ui.picker != nil {

@@ -42,3 +42,25 @@ func TestEditorHistoryRestoresDraft(t *testing.T) {
 		t.Fatalf("restore = %q", e.String())
 	}
 }
+
+func TestSplitEditorCommandHonorsQuotesAndEscapes(t *testing.T) {
+	parts, err := splitEditorCommand(`code --reuse-window "my notes.md"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"code", "--reuse-window", "my notes.md"}
+	if len(parts) != len(want) {
+		t.Fatalf("parts = %#v", parts)
+	}
+	for index := range want {
+		if parts[index] != want[index] {
+			t.Fatalf("part %d = %q, want %q", index, parts[index], want[index])
+		}
+	}
+}
+
+func TestSplitEditorCommandRejectsUnterminatedQuotes(t *testing.T) {
+	if _, err := splitEditorCommand(`code "notes.md`); err == nil {
+		t.Fatal("expected unterminated quote error")
+	}
+}
