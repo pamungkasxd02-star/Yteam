@@ -134,7 +134,6 @@ func (ui *UI) startEventWatcher(ctx context.Context) {
 			}
 			ui.mu.Lock()
 			ui.reducer.Apply(event)
-			ui.transcript = ui.app.CurrentSession().Messages
 			ui.mu.Unlock()
 			select {
 			case ui.redraw <- struct{}{}:
@@ -186,6 +185,7 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				fmt.Fprintln(ui.out, "error:", err)
 			}
 			ui.transcript = ui.app.CurrentSession().Messages
+			ui.reducer.Hydrate(ui.transcript)
 			ui.draw()
 			continue
 		case <-ctx.Done():
@@ -772,6 +772,7 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 		}
 		ui.route = RouteHome
 		ui.transcript = nil
+		ui.reducer.Hydrate(nil)
 		fmt.Fprintln(ui.out, "New session:", next.ID)
 		return true, nil
 	case "/fork":
@@ -781,6 +782,7 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 		}
 		ui.route = RouteSession
 		ui.transcript = next.Messages
+		ui.reducer.Hydrate(next.Messages)
 		fmt.Fprintln(ui.out, "Forked session:", next.ID)
 		return true, nil
 	case "/rename":
@@ -848,6 +850,7 @@ func (ui *UI) selectPicker(_ context.Context) error {
 		}
 		ui.route = RouteSession
 		ui.transcript = next.Messages
+		ui.reducer.Hydrate(next.Messages)
 	}
 	return nil
 }
@@ -870,13 +873,26 @@ func (ui *UI) draw() {
 		current := ui.app.CurrentSession()
 		fmt.Fprintf(ui.out, "YTEAM  Session %s\n", current.ID)
 		fmt.Fprintln(ui.out, strings.Repeat("─", 72))
-		messages := make([]MessageView, 0, len(ui.transcript))
-		for _, message := range ui.transcript {
-			messages = append(messages, MessageView{Role: message.Role, Content: message.Content})
+		messages := make([]MessageView, 0, len(ui.reducer.Messages))
+		for _, message := range ui.reducer.Messages {
+			content := message.Content
+			if message.Role == "tool" && content == "" {
+				content = message.ToolName
+			}
+			messages = append(messages, MessageView{Role: message.Role, Content: content})
+		}
+		if len(messages) == 0 {
+			for _, message := range ui.transcript {
+				messages = append(messages, MessageView{Role: message.Role, Content: message.Content})
+			}
 		}
 		ui.viewport.SetLines(transcriptLines(messages, ui.viewport.Width))
 		for _, line := range ui.viewport.Visible() {
 			fmt.Fprintln(ui.out, line)
+		}
+		status := ui.reducer.Status
+		if status != "idle" {
+			fmt.Fprintf(ui.out, "\nstatus: %s\n", status)
 		}
 	}
 	if ui.picker != nil {

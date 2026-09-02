@@ -924,7 +924,7 @@ func (r *Runtime) promptDelivery(ctx context.Context, text string, delivery sess
 			_, _ = fmt.Fprintf(out, "\n[tool %s error: %v]\n", call.Name, err)
 			return
 		}
-		_, _ = fmt.Fprintf(out, "\n[tool %s selesai]\n", call.Name)
+		_, _ = fmt.Fprintf(out, "\n[tool %s completed]\n", call.Name)
 		_ = result
 	}}
 	if r.Coordinator == nil {

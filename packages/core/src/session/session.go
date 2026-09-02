@@ -79,7 +79,7 @@ func (s *Store) New() (*Session, error) {
 		return nil, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	sess := &Session{ID: "ses_" + hex.EncodeToString(buf), Title: "Sesi baru", Directory: s.directory, CreatedAt: now, UpdatedAt: now, RunStatus: RunIdle}
+	sess := &Session{ID: "ses_" + hex.EncodeToString(buf), Title: "New session", Directory: s.directory, CreatedAt: now, UpdatedAt: now, RunStatus: RunIdle}
 	return sess, s.writeMeta(sess)
 }
 
@@ -168,7 +168,7 @@ func (s *Store) Append(id string, message Message) error {
 		return err
 	}
 	sess.UpdatedAt = message.CreatedAt
-	if sess.Title == "Sesi baru" && message.Role == "user" {
+	if sess.Title == "New session" && message.Role == "user" {
 		sess.Title = title(message.Content)
 	}
 	return s.writeMetaLocked(sess)
