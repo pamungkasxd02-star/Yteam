@@ -29,3 +29,16 @@ func TestShortPasteKeepsOriginalText(t *testing.T) {
 		t.Fatalf("virtual=%q summarized=%v", virtual, summarized)
 	}
 }
+
+func TestFilePartKeepsVirtualSourceShape(t *testing.T) {
+	part := schema.MessagePart{
+		Type:     "file",
+		Filename: "notes.md",
+		Source:   &schema.PromptPartSource{Type: "file", Path: "notes.md", Text: &schema.PromptTextSource{Start: 0, End: 11, Value: "@notes.md"}},
+	}
+	copy := clonePromptParts([]schema.MessagePart{part})
+	copy[0].Source.Text.Start = 2
+	if part.Source.Text.Start != 0 || copy[0].Source.Text.Start != 2 {
+		t.Fatalf("source range was not cloned: original=%#v copy=%#v", part, copy[0])
+	}
+}

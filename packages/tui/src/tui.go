@@ -270,12 +270,12 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.refreshAutocomplete()
 		case KeyTab:
 			if ui.autocomplete != nil && ui.autocomplete.Visible {
-				ui.autocomplete.Accept(ui.editor)
+				ui.acceptAutocomplete()
 				ui.refreshAutocomplete()
 			}
 		case KeyEnter:
 			if ui.autocomplete != nil && ui.autocomplete.Visible {
-				ui.autocomplete.Accept(ui.editor)
+				ui.acceptAutocomplete()
 				ui.refreshAutocomplete()
 				ui.draw()
 				continue
@@ -353,12 +353,10 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.refreshAutocomplete()
 		case KeyLeft:
 			ui.editor.Left()
-			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyRight:
 			ui.editor.Right()
-			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyWordLeft:
@@ -383,12 +381,10 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.refreshAutocomplete()
 		case KeyHome:
 			ui.editor.Home()
-			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyEnd:
 			ui.editor.End()
-			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyUp:
@@ -478,6 +474,30 @@ func (ui *UI) insertPaste(value string) {
 	})
 	ui.resetPromptHistoryNavigation()
 	ui.refreshAutocomplete()
+}
+
+func (ui *UI) acceptAutocomplete() {
+	if ui.autocomplete == nil || !ui.autocomplete.Visible {
+		return
+	}
+	item, ok := ui.autocomplete.Selected()
+	if !ok {
+		return
+	}
+	kind := ui.autocomplete.Kind
+	start := ui.autocomplete.Start
+	if !ui.autocomplete.Accept(ui.editor) {
+		return
+	}
+	if kind != AutocompleteFile {
+		return
+	}
+	virtual := "@" + item.ID
+	ui.promptParts = append(ui.promptParts, schema.MessagePart{
+		Type:     "file",
+		Filename: item.ID,
+		Source:   &schema.PromptPartSource{Type: "file", Path: item.ID, Text: &schema.PromptTextSource{Start: start, End: start + len([]rune(virtual)), Value: virtual}},
+	})
 }
 
 func (ui *UI) resetPromptHistoryNavigation() {
