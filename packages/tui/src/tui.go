@@ -1145,6 +1145,7 @@ func (ui *UI) draw() {
 	}
 	width, height := terminalSize(ui.terminal)
 	ui.viewport.SetSize(width, height-6)
+	separator := strings.Repeat("─", maxInt(width, 1))
 	if ui.route == RouteHome {
 		fmt.Fprintln(ui.out, "YTEAM  Home")
 		fmt.Fprintln(ui.out, "")
@@ -1153,7 +1154,7 @@ func (ui *UI) draw() {
 	} else {
 		current := ui.app.CurrentSession()
 		fmt.Fprintf(ui.out, "YTEAM  Session %s\n", current.ID)
-		fmt.Fprintln(ui.out, strings.Repeat("─", 72))
+		fmt.Fprintln(ui.out, separator)
 		messages := make([]MessageView, 0, len(ui.reducer.Messages))
 		for _, message := range ui.reducer.Messages {
 			content := message.Content
@@ -1237,7 +1238,7 @@ func (ui *UI) draw() {
 			fmt.Fprintln(ui.out, "Press esc to go back/reject")
 		}
 	}
-	fmt.Fprintln(ui.out, strings.Repeat("─", 72))
+	fmt.Fprintln(ui.out, separator)
 	fmt.Fprintf(ui.out, "agent: %s  |  model: %s", ui.app.AgentName(), ui.app.ModelName())
 	if variant := ui.app.VariantName(); variant != "" {
 		fmt.Fprintf(ui.out, "  |  variant: %s", variant)
