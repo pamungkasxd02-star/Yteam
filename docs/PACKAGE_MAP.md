@@ -17,5 +17,6 @@ compatibility.
 | `opencode/src/mcp` | MCP stdio/remote transport, initialization, pagination, and startup config |
 | `opencode/src/lsp` | LSP JSON-RPC lifecycle, reusable client selection, and advanced operations |
 | `plugin` | portable subprocess JSON-RPC plugin lifecycle and tool bridge |
+| `client` | typed HTTP/SSE SDK for server and session contracts |
 | `skill` | `SKILL.md` discovery |
 | all other `packages/*` | boundary created; implementation staged |

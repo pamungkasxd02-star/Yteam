@@ -53,6 +53,8 @@ The Go foundation currently has working implementations and tests for:
   and call-hierarchy operations;
 - portable subprocess plugin bridge with manifest loading, initialize,
   tools/list, tools/call, isolated status, and tool-registry integration;
+- typed client SDK with bearer authentication, session/lifecycle operations,
+  provider resources, and replayable global/session SSE event streams;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
