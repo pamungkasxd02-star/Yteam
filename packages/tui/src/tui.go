@@ -454,6 +454,18 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			} else {
 				ui.viewport.Page(1)
 			}
+		case KeyMessageLineUp:
+			ui.viewport.Line(-1)
+		case KeyMessageLineDown:
+			ui.viewport.Line(1)
+		case KeyMessageHalfPageUp:
+			ui.viewport.HalfPage(-1)
+		case KeyMessageHalfPageDown:
+			ui.viewport.HalfPage(1)
+		case KeyMessageFirst:
+			ui.viewport.First()
+		case KeyMessageLast:
+			ui.viewport.Last()
 		case KeyCtrlP:
 			if ui.promptHistory != nil {
 				if value, ok := ui.promptHistory.Move(-1, ui.editor.String()); ok {

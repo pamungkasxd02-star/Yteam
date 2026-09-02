@@ -23,6 +23,12 @@ const (
 	ActionHistoryNext        Action = "prompt.history.next"
 	ActionPageUp             Action = "messages.page_up"
 	ActionPageDown           Action = "messages.page_down"
+	ActionLineUp             Action = "messages.line_up"
+	ActionLineDown           Action = "messages.line_down"
+	ActionHalfPageUp         Action = "messages.half_page_up"
+	ActionHalfPageDown       Action = "messages.half_page_down"
+	ActionFirst              Action = "messages.first"
+	ActionLast               Action = "messages.last"
 	ActionExit               Action = "app.exit"
 	ActionEditor             Action = "prompt.editor"
 	ActionStash              Action = "prompt.stash"
@@ -52,6 +58,12 @@ func DefaultKeymap() *Keymap {
 		ActionHistoryNext:        "down",
 		ActionPageUp:             "pageup",
 		ActionPageDown:           "pagedown",
+		ActionLineUp:             "none",
+		ActionLineDown:           "none",
+		ActionHalfPageUp:         "none",
+		ActionHalfPageDown:       "none",
+		ActionFirst:              "ctrl+g",
+		ActionLast:               "none",
 		ActionExit:               "ctrl+c",
 		ActionEditor:             "ctrl+e",
 		ActionStash:              "none",
@@ -132,6 +144,9 @@ func (k *Keymap) Normalize(key Key) Key {
 		{ActionDeleteWordBackward, KeyDeleteWordBackward}, {ActionDeleteWordForward, KeyDeleteWordForward},
 		{ActionHistoryPrevious, KeyUp}, {ActionHistoryNext, KeyDown},
 		{ActionPageUp, KeyPageUp}, {ActionPageDown, KeyPageDown},
+		{ActionLineUp, KeyMessageLineUp}, {ActionLineDown, KeyMessageLineDown},
+		{ActionHalfPageUp, KeyMessageHalfPageUp}, {ActionHalfPageDown, KeyMessageHalfPageDown},
+		{ActionFirst, KeyMessageFirst}, {ActionLast, KeyMessageLast},
 		{ActionEditor, KeyOpenEditor},
 		{ActionStash, KeyStash},
 		{ActionClear, KeyClear},
@@ -176,6 +191,20 @@ func keyBindingMatches(key Key, binding string) bool {
 		return key.Kind == KeyPageUp
 	case "pagedown":
 		return key.Kind == KeyPageDown
+	case "ctrl+g":
+		return key.Kind == KeyCtrlG
+	case "home":
+		return key.Kind == KeyHome
+	case "end":
+		return key.Kind == KeyEnd
+	case "ctrl+alt+y":
+		return key.Kind == KeyMessageLineUp
+	case "ctrl+alt+e":
+		return key.Kind == KeyMessageLineDown
+	case "ctrl+alt+u":
+		return key.Kind == KeyMessageHalfPageUp
+	case "ctrl+alt+d":
+		return key.Kind == KeyMessageHalfPageDown
 	case "ctrl+e":
 		return key.Kind == KeyCtrlE
 	case "ctrl+s":

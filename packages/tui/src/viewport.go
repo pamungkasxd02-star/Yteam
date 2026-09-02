@@ -51,6 +51,31 @@ func (v *Viewport) Page(direction int) {
 	v.clamp()
 }
 
+func (v *Viewport) Line(direction int) {
+	v.FollowBottom = false
+	v.Offset += direction
+	v.clamp()
+}
+
+func (v *Viewport) HalfPage(direction int) {
+	step := v.Height / 2
+	if step < 1 {
+		step = 1
+	}
+	v.FollowBottom = false
+	v.Offset += direction * step
+	v.clamp()
+}
+
+func (v *Viewport) ToTop() {
+	v.FollowBottom = false
+	v.Offset = 0
+}
+
+func (v *Viewport) First() { v.ToTop() }
+
+func (v *Viewport) Last() { v.ToBottom() }
+
 func (v *Viewport) ToBottom() {
 	v.FollowBottom = true
 	v.toBottom()

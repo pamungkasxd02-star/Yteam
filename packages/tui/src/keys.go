@@ -39,6 +39,13 @@ const (
 	KeyClear
 	KeyCtrlL
 	KeyClipboardPaste
+	KeyCtrlG
+	KeyMessageLineUp
+	KeyMessageLineDown
+	KeyMessageHalfPageUp
+	KeyMessageHalfPageDown
+	KeyMessageFirst
+	KeyMessageLast
 )
 
 type Key struct {
@@ -112,6 +119,10 @@ func (r *KeyReader) ReadKey() (Key, error) {
 	if data[0] == 22 {
 		r.pending = data[1:]
 		return Key{Kind: KeyClipboardPaste}, nil
+	}
+	if data[0] == 7 {
+		r.pending = data[1:]
+		return Key{Kind: KeyCtrlG}, nil
 	}
 	if data[0] == 23 {
 		r.pending = data[1:]
@@ -198,6 +209,14 @@ func (r *KeyReader) csi(data []byte) (Key, error) {
 				return Key{Kind: KeyPageUp}, nil
 			case "6~":
 				return Key{Kind: KeyPageDown}, nil
+			case "1;7A":
+				return Key{Kind: KeyMessageLineUp}, nil
+			case "1;7B":
+				return Key{Kind: KeyMessageLineDown}, nil
+			case "1;7C":
+				return Key{Kind: KeyMessageHalfPageDown}, nil
+			case "1;7D":
+				return Key{Kind: KeyMessageHalfPageUp}, nil
 			case "1;3D", "1;5D", "5D":
 				return Key{Kind: KeyWordLeft}, nil
 			case "1;3C", "1;5C", "5C":

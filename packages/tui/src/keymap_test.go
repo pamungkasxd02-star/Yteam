@@ -75,3 +75,13 @@ func TestPromptClearCanBeRemappedWithoutChangingExit(t *testing.T) {
 		t.Fatal("exit binding changed when clear was remapped")
 	}
 }
+
+func TestMessageNavigationBindingsAreConfigurable(t *testing.T) {
+	keymap := DefaultKeymap()
+	if keymap.Binding(ActionFirst) != "ctrl+g" || keymap.Binding(ActionPageUp) != "pageup" || keymap.Binding(ActionPageDown) != "pagedown" {
+		t.Fatalf("message bindings = %#v", keymap.bindings)
+	}
+	if keymap.Normalize(Key{Kind: KeyCtrlG}).Kind != KeyMessageFirst {
+		t.Fatal("ctrl+g did not select first-message action")
+	}
+}

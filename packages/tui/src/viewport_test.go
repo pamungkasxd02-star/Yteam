@@ -28,3 +28,34 @@ func TestViewportFollowsBottomAndPagesAway(t *testing.T) {
 		t.Fatalf("to bottom = %#v", got)
 	}
 }
+
+func TestViewportSupportsLineHalfPageAndTopNavigation(t *testing.T) {
+	v := NewViewport(10, 4)
+	v.SetLines([]string{"0", "1", "2", "3", "4", "5", "6", "7"})
+	v.ToTop()
+	v.Line(1)
+	if v.Offset != 1 {
+		t.Fatalf("line offset = %d", v.Offset)
+	}
+	v.HalfPage(1)
+	if v.Offset != 3 {
+		t.Fatalf("half-page offset = %d", v.Offset)
+	}
+	v.ToTop()
+	if v.Offset != 0 || v.FollowBottom {
+		t.Fatalf("top offset = %d follow=%v", v.Offset, v.FollowBottom)
+	}
+}
+
+func TestViewportFirstAndLastFollowExpectedBounds(t *testing.T) {
+	v := NewViewport(10, 2)
+	v.SetLines([]string{"0", "1", "2", "3"})
+	v.First()
+	if v.Offset != 0 || v.FollowBottom {
+		t.Fatalf("first = %#v", v)
+	}
+	v.Last()
+	if v.Offset != 2 || !v.FollowBottom {
+		t.Fatalf("last = %#v", v)
+	}
+}
