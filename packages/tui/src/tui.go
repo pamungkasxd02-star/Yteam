@@ -157,6 +157,8 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 		return err
 	}
 	defer terminal.Close()
+	resizeEvents, stopResize := watchTerminalResize()
+	defer stopResize()
 	ui.draw()
 	keys := NewKeyReader(file)
 	type keyResult struct {
@@ -195,6 +197,13 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			continue
 		case <-ctx.Done():
 			return ctx.Err()
+		case _, ok := <-resizeEvents:
+			if ok {
+				width, height := terminalSize(file)
+				ui.viewport.SetSize(width, height-6)
+				ui.draw()
+			}
+			continue
 		}
 		if key.Kind == KeyCtrlC {
 			ui.app.InterruptSession(ui.app.CurrentSession().ID)

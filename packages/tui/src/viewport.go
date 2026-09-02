@@ -25,7 +25,11 @@ func (v *Viewport) SetSize(width, height int) {
 	} else {
 		v.Height = 1
 	}
-	v.clamp()
+	if v.FollowBottom {
+		v.toBottom()
+	} else {
+		v.clamp()
+	}
 }
 
 func (v *Viewport) SetLines(lines []string) {
