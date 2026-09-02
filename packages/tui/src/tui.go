@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	commandpkg "github.com/pamungkasxd02-star/Yteam/packages/command/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/permission"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/session"
@@ -61,6 +62,9 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	autocomplete := NewAutocomplete()
 	for _, item := range app.CommandList() {
 		autocomplete.Commands = append(autocomplete.Commands, PickerItem{ID: "/" + item.Name, Label: "/" + item.Name, Description: item.Description})
+	}
+	for _, item := range commandpkg.AliasItems() {
+		autocomplete.Commands = append(autocomplete.Commands, PickerItem{ID: item.ID, Label: item.Label, Description: item.Description})
 	}
 	for _, item := range []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/status", Label: "/status", Description: "Show status"}, {ID: "/usage", Label: "/usage", Description: "Show provider usage"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/variants", Label: "/variants", Description: "Choose a model variant"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Switch session"}, {ID: "/resume", Label: "/resume", Description: "Resume a session"}, {ID: "/continue", Label: "/continue", Description: "Continue a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/clear", Label: "/clear", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/history", Label: "/history", Description: "Show session history"}, {ID: "/skills", Label: "/skills", Description: "List skills"}, {ID: "/mcps", Label: "/mcps", Description: "Show MCP integrations"}, {ID: "/lsp", Label: "/lsp", Description: "Show LSP integrations"}, {ID: "/plugins", Label: "/plugins", Description: "Show plugin integrations"}, {ID: "/editor", Label: "/editor", Description: "Open external editor"}, {ID: "/exit", Label: "/exit", Description: "Exit"}, {ID: "/quit", Label: "/quit", Description: "Exit"}, {ID: "/q", Label: "/q", Description: "Exit"}} {
 		found := false
@@ -459,7 +463,7 @@ func (ui *UI) isPromptCommand(text string) bool {
 	if len(parts) == 0 || !strings.HasPrefix(parts[0], "/") {
 		return false
 	}
-	name := strings.TrimPrefix(parts[0], "/")
+	name := commandpkg.Canonical(parts[0])
 	if name == "editor" {
 		return true
 	}

@@ -739,12 +739,12 @@ func (r *Runtime) Command(ctx context.Context, input string, out io.Writer) (boo
 	if len(parts) == 0 || !strings.HasPrefix(parts[0], "/") {
 		return false, nil
 	}
-	name := strings.TrimPrefix(parts[0], "/")
+	name := commandpkg.Canonical(parts[0])
 	if item, ok := r.Commands[name]; ok {
 		args := parts[1:]
 		return true, r.promptCommand(ctx, item, args, out)
 	}
-	switch parts[0] {
+	switch "/" + name {
 	case "/help":
 		r.Help(out)
 	case "/status":

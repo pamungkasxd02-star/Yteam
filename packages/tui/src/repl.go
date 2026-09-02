@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	commandpkg "github.com/pamungkasxd02-star/Yteam/packages/command/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/runtime"
 )
 
@@ -25,7 +26,7 @@ func Run(ctx context.Context, app *runtime.Runtime, in io.Reader, out io.Writer)
 		if line == "" {
 			continue
 		}
-		if line == "/exit" || line == "/quit" || line == "/q" {
+		if commandpkg.Canonical(line) == "exit" {
 			return nil
 		}
 		if handled, err := app.Command(ctx, line, out); handled {
