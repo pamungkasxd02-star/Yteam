@@ -41,14 +41,5 @@ type ModelVariant struct {
 	Options     map[string]any `json:"options,omitempty"`
 }
 
-type Usage struct {
-	PromptTokens            int           `json:"prompt_tokens,omitempty"`
-	CompletionTokens        int           `json:"completion_tokens,omitempty"`
-	TotalTokens             int           `json:"total_tokens,omitempty"`
-	PromptTokensDetails     *TokenDetails `json:"prompt_tokens_details,omitempty"`
-	CompletionTokensDetails *TokenDetails `json:"completion_tokens_details,omitempty"`
-}
-
-type TokenDetails struct {
-	CachedTokens int `json:"cached_tokens,omitempty"`
-}
+type Usage = schema.Usage
+type TokenDetails = schema.TokenDetails

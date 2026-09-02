@@ -29,6 +29,7 @@ func (r *Runner) Run(ctx context.Context, sess *session.Session, model, system s
 
 type RunOptions struct {
 	OnText      func(string)
+	OnDelta     func(protocol.StreamDelta)
 	OnToolStart func(schema.ToolCall)
 	OnTool      func(schema.ToolCall, string, error)
 }
@@ -44,10 +45,14 @@ func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, mode
 			messages = append(messages, schema.Message{Role: schema.RoleSystem, Content: system})
 		}
 		for _, item := range sess.Messages {
-			messages = append(messages, schema.Message{Role: schema.Role(item.Role), Content: item.Content, Name: item.Name, ToolCallID: item.ToolCallID, ToolCalls: item.ToolCalls})
+			messages = append(messages, schema.Message{Role: schema.Role(item.Role), Content: item.Content, Reasoning: item.Reasoning, Model: item.Model, FinishReason: item.FinishReason, Usage: item.Usage, Parts: item.Parts, Name: item.Name, ToolCallID: item.ToolCallID, ToolCalls: item.ToolCalls})
 		}
 		var text strings.Builder
 		var calls []schema.ToolCall
+		var reasoning string
+		var usage *protocol.Usage
+		responseModel := ""
+		finishReason := ""
 		err := r.Provider.CompleteRetry(ctx, protocol.ChatRequest{Model: model, Messages: messages, Tools: r.toolDefinitions()}, func(delta protocol.StreamDelta) error {
 			if delta.Content != "" {
 				text.WriteString(delta.Content)
@@ -58,13 +63,39 @@ func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, mode
 			if len(delta.ToolCalls) > 0 {
 				calls = append(calls, delta.ToolCalls...)
 			}
+			if delta.Reasoning != "" {
+				reasoning += delta.Reasoning
+			}
+			if delta.Usage != nil {
+				usage = delta.Usage
+			}
+			if delta.Model != "" {
+				responseModel = delta.Model
+			}
+			if delta.FinishReason != "" {
+				finishReason = delta.FinishReason
+			}
+			if options.OnDelta != nil {
+				options.OnDelta(delta)
+			}
 			return nil
 		})
 		if err != nil {
 			return err
 		}
-		if text.Len() > 0 || len(calls) > 0 {
-			assistant := session.Message{ID: session.NewMessageID(), Role: "assistant", Content: text.String(), ToolCalls: calls}
+		if text.Len() > 0 || reasoning != "" || usage != nil || responseModel != "" || finishReason != "" || len(calls) > 0 {
+			parts := []schema.MessagePart{}
+			if text.Len() > 0 {
+				parts = append(parts, schema.MessagePart{Type: "text", Text: text.String()})
+			}
+			if reasoning != "" {
+				parts = append(parts, schema.MessagePart{Type: "reasoning", Text: reasoning})
+			}
+			for _, call := range calls {
+				toolCall := call
+				parts = append(parts, schema.MessagePart{Type: "tool-call", ToolCall: &toolCall, ToolCallID: call.ID, State: "pending"})
+			}
+			assistant := session.Message{ID: session.NewMessageID(), Role: "assistant", Content: text.String(), Reasoning: reasoning, Model: responseModel, FinishReason: finishReason, Usage: usage, Parts: parts, ToolCalls: calls}
 			if err := r.appendMessage(sess, assistant); err != nil {
 				return err
 			}
@@ -98,12 +129,19 @@ func (r *Runner) RunWithOptions(ctx context.Context, sess *session.Session, mode
 			if errs[index] != nil {
 				content = "tool error: " + errs[index].Error()
 			}
-			if err := r.appendMessage(sess, session.Message{ID: session.NewMessageID(), Role: "tool", ToolCallID: call.ID, Name: call.Name, Content: content}); err != nil {
+			if err := r.appendMessage(sess, session.Message{ID: session.NewMessageID(), Role: "tool", ToolCallID: call.ID, Name: call.Name, Content: content, Parts: []schema.MessagePart{{Type: "tool-result", ToolCallID: call.ID, Text: content, State: toolState(errs[index])}}}); err != nil {
 				return err
 			}
 		}
 	}
 	return fmt.Errorf("agent stopped after %d steps", max)
+}
+
+func toolState(err error) string {
+	if err != nil {
+		return "error"
+	}
+	return "done"
 }
 
 func (r *Runner) toolDefinitions() []schema.ToolDefinition {

@@ -17,10 +17,14 @@ type TranscriptReducer struct {
 }
 
 type LiveMessage struct {
-	Role      string
-	Content   string
-	ToolName  string
-	ToolState string
+	Role         string
+	Content      string
+	Reasoning    string
+	Model        string
+	FinishReason string
+	Usage        string
+	ToolName     string
+	ToolState    string
 }
 
 func NewTranscriptReducer() *TranscriptReducer { return &TranscriptReducer{Status: "idle"} }
@@ -28,7 +32,7 @@ func NewTranscriptReducer() *TranscriptReducer { return &TranscriptReducer{Statu
 func (r *TranscriptReducer) Hydrate(messages []session.Message) {
 	r.Messages = r.Messages[:0]
 	for _, message := range messages {
-		r.Messages = append(r.Messages, LiveMessage{Role: message.Role, Content: message.Content})
+		r.Messages = append(r.Messages, LiveMessage{Role: message.Role, Content: message.Content, Reasoning: message.Reasoning, Model: message.Model, FinishReason: message.FinishReason})
 	}
 }
 
@@ -46,6 +50,17 @@ func (r *TranscriptReducer) Apply(event schema.Event) {
 			r.Messages = append(r.Messages, LiveMessage{Role: "assistant"})
 		}
 		r.Messages[len(r.Messages)-1].Content += text
+	case schema.EventMessageMetadata:
+		if len(r.Messages) == 0 || r.Messages[len(r.Messages)-1].Role != "assistant" {
+			r.Messages = append(r.Messages, LiveMessage{Role: "assistant"})
+		}
+		message := &r.Messages[len(r.Messages)-1]
+		message.Reasoning += stringValue(event.Data["reasoning"])
+		message.Model = stringValue(event.Data["model"])
+		message.FinishReason = stringValue(event.Data["finish_reason"])
+		if event.Data["usage"] != nil {
+			message.Usage = fmt.Sprint(event.Data["usage"])
+		}
 	case schema.EventToolStarted:
 		r.Messages = append(r.Messages, LiveMessage{Role: "tool", ToolName: stringValue(event.Data["name"]), ToolState: "running"})
 		r.Status = "tool"

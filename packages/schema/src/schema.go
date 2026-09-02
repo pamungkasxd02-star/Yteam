@@ -12,11 +12,37 @@ const (
 )
 
 type Message struct {
-	Role       Role       `json:"role"`
-	Content    string     `json:"content,omitempty"`
-	Name       string     `json:"name,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	Role         Role          `json:"role"`
+	Content      string        `json:"content,omitempty"`
+	Reasoning    string        `json:"reasoning,omitempty"`
+	Model        string        `json:"model,omitempty"`
+	FinishReason string        `json:"finish_reason,omitempty"`
+	Usage        *Usage        `json:"usage,omitempty"`
+	Parts        []MessagePart `json:"parts,omitempty"`
+	Name         string        `json:"name,omitempty"`
+	ToolCallID   string        `json:"tool_call_id,omitempty"`
+	ToolCalls    []ToolCall    `json:"tool_calls,omitempty"`
+}
+
+type MessagePart struct {
+	Type       string    `json:"type"`
+	Text       string    `json:"text,omitempty"`
+	ToolCall   *ToolCall `json:"tool_call,omitempty"`
+	ToolCallID string    `json:"tool_call_id,omitempty"`
+	State      string    `json:"state,omitempty"`
+	Error      string    `json:"error,omitempty"`
+}
+
+type Usage struct {
+	PromptTokens            int           `json:"prompt_tokens,omitempty"`
+	CompletionTokens        int           `json:"completion_tokens,omitempty"`
+	TotalTokens             int           `json:"total_tokens,omitempty"`
+	PromptTokensDetails     *TokenDetails `json:"prompt_tokens_details,omitempty"`
+	CompletionTokensDetails *TokenDetails `json:"completion_tokens_details,omitempty"`
+}
+
+type TokenDetails struct {
+	CachedTokens int `json:"cached_tokens,omitempty"`
 }
 
 type ToolCall struct {

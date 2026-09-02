@@ -19,3 +19,11 @@ func TestTranscriptReducerAppliesLiveEvents(t *testing.T) {
 		t.Fatalf("messages = %#v", reducer.Messages)
 	}
 }
+
+func TestTranscriptReducerAppliesMessageMetadata(t *testing.T) {
+	reducer := NewTranscriptReducer()
+	reducer.Apply(schema.Event{Type: schema.EventMessageMetadata, Data: map[string]any{"model": "test-model", "reasoning": "thinking", "finish_reason": "stop", "usage": map[string]any{"total_tokens": 4}}})
+	if len(reducer.Messages) != 1 || reducer.Messages[0].Model != "test-model" || reducer.Messages[0].Reasoning != "thinking" || reducer.Messages[0].FinishReason != "stop" || reducer.Messages[0].Usage == "" {
+		t.Fatalf("messages = %#v", reducer.Messages)
+	}
+}

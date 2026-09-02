@@ -17,6 +17,7 @@ const (
 	EventPromptAdmitted   = "session.prompt.admitted"
 	EventPrompted         = "session.prompted"
 	EventTextDelta        = "message.text.delta"
+	EventMessageMetadata  = "message.metadata"
 	EventToolStarted      = "tool.started"
 	EventToolFinished     = "tool.finished"
 	EventPermissionAsked  = "permission.asked"

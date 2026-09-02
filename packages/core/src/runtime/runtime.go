@@ -739,6 +739,26 @@ func (r *Runtime) PromptDelivery(ctx context.Context, text string, delivery sess
 		if r.Events != nil {
 			_, _ = r.Events.Publish(ctx, schema.EventToolStarted, current.ID, map[string]any{"name": call.Name, "call_id": call.ID})
 		}
+	}, OnDelta: func(delta protocol.StreamDelta) {
+		if r.Events == nil {
+			return
+		}
+		data := map[string]any{}
+		if delta.Model != "" {
+			data["model"] = delta.Model
+		}
+		if delta.Reasoning != "" {
+			data["reasoning"] = delta.Reasoning
+		}
+		if delta.FinishReason != "" {
+			data["finish_reason"] = delta.FinishReason
+		}
+		if delta.Usage != nil {
+			data["usage"] = delta.Usage
+		}
+		if len(data) > 0 {
+			_, _ = r.Events.Publish(ctx, schema.EventMessageMetadata, current.ID, data)
+		}
 	}, OnTool: func(call schema.ToolCall, result string, err error) {
 		if r.Events != nil {
 			_, _ = r.Events.Publish(ctx, schema.EventToolFinished, current.ID, map[string]any{"name": call.Name, "error": errorText(err)})

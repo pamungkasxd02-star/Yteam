@@ -17,14 +17,19 @@ import (
 )
 
 type Message struct {
-	ID         string            `json:"id"`
-	Role       string            `json:"role"`
-	Content    string            `json:"content"`
-	Name       string            `json:"name,omitempty"`
-	ToolCallID string            `json:"tool_call_id,omitempty"`
-	ToolCalls  []schema.ToolCall `json:"tool_calls,omitempty"`
-	SnapshotID string            `json:"snapshot_id,omitempty"`
-	CreatedAt  string            `json:"created_at"`
+	ID           string               `json:"id"`
+	Role         string               `json:"role"`
+	Content      string               `json:"content"`
+	Reasoning    string               `json:"reasoning,omitempty"`
+	Model        string               `json:"model,omitempty"`
+	FinishReason string               `json:"finish_reason,omitempty"`
+	Usage        *schema.Usage        `json:"usage,omitempty"`
+	Parts        []schema.MessagePart `json:"parts,omitempty"`
+	Name         string               `json:"name,omitempty"`
+	ToolCallID   string               `json:"tool_call_id,omitempty"`
+	ToolCalls    []schema.ToolCall    `json:"tool_calls,omitempty"`
+	SnapshotID   string               `json:"snapshot_id,omitempty"`
+	CreatedAt    string               `json:"created_at"`
 }
 type Session struct {
 	ID        string       `json:"id"`

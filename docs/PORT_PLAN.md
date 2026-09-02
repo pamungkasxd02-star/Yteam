@@ -57,6 +57,8 @@ The Go foundation currently has working implementations and tests for:
   provider resources, and replayable global/session SSE event streams;
 - typed client status/context/error contracts with standard SSE comment,
   multiline-data, close, and EOF handling;
+- durable message metadata and typed parts for reasoning, model, usage,
+  finish state, tool calls, and tool results, including live event projection;
 - Git read-only helpers and `SKILL.md` discovery;
 - an OpenCode-shaped Home/Session terminal UI foundation;
 - raw-key UTF-8/ANSI input, multiline editing, history, searchable pickers,
