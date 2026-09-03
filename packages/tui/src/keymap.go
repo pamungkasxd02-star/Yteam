@@ -39,6 +39,12 @@ const (
 	ActionStash              Action = "prompt.stash"
 	ActionClear              Action = "prompt.clear"
 	ActionPaste              Action = "input.paste"
+	ActionLineHome           Action = "input.line.home"
+	ActionLineEnd            Action = "input.line.end"
+	ActionDeleteToLineEnd    Action = "input.delete.to.line.end"
+	ActionDeleteToLineStart  Action = "input.delete.to.line.start"
+	ActionUndo               Action = "input.undo"
+	ActionRedo               Action = "input.redo"
 )
 
 type KeymapConfig struct {
@@ -52,13 +58,13 @@ type Keymap struct {
 func DefaultKeymap() *Keymap {
 	return &Keymap{bindings: map[Action]string{
 		ActionSubmit:             "return",
-		ActionNewline:            "ctrl+j",
-		ActionBackspace:          "backspace",
-		ActionDelete:             "delete",
-		ActionWordBackward:       "alt+left",
-		ActionWordForward:        "alt+right",
-		ActionDeleteWordBackward: "ctrl+w",
-		ActionDeleteWordForward:  "ctrl+delete",
+		ActionNewline:            "shift+return,ctrl+return,alt+return,ctrl+j",
+		ActionBackspace:          "backspace,shift+backspace",
+		ActionDelete:             "delete,shift+delete",
+		ActionWordBackward:       "alt+b,alt+left,ctrl+left",
+		ActionWordForward:        "alt+f,alt+right,ctrl+right",
+		ActionDeleteWordBackward: "ctrl+w,ctrl+backspace,alt+backspace",
+		ActionDeleteWordForward:  "alt+d,alt+delete,ctrl+delete",
 		ActionHistoryPrevious:    "up",
 		ActionHistoryNext:        "down",
 		ActionPageUp:             "pageup",
@@ -67,18 +73,24 @@ func DefaultKeymap() *Keymap {
 		ActionLineDown:           "none",
 		ActionHalfPageUp:         "none",
 		ActionHalfPageDown:       "none",
-		ActionFirst:              "ctrl+g",
-		ActionLast:               "none",
-		ActionSelectAll:          "ctrl+a",
+		ActionFirst:              "ctrl+g,home",
+		ActionLast:               "ctrl+alt+g,end",
+		ActionSelectAll:          "super+a",
 		ActionSelectLeft:         "shift+left",
 		ActionSelectRight:        "shift+right",
 		ActionSelectUp:           "shift+up",
 		ActionSelectDown:         "shift+down",
-		ActionExit:               "ctrl+c",
-		ActionEditor:             "ctrl+e",
+		ActionExit:               "ctrl+c,<leader>q",
+		ActionEditor:             "<leader>e",
 		ActionStash:              "none",
 		ActionClear:              "ctrl+c",
 		ActionPaste:              "ctrl+v",
+		ActionLineHome:           "ctrl+a",
+		ActionLineEnd:            "ctrl+e",
+		ActionDeleteToLineEnd:    "ctrl+k",
+		ActionDeleteToLineStart:  "ctrl+u",
+		ActionUndo:               "ctrl+-,super+z",
+		ActionRedo:               "ctrl+.,super+shift+z",
 	}}
 }
 
@@ -164,6 +176,11 @@ func (k *Keymap) Normalize(key Key) Key {
 		{ActionClear, KeyClear},
 		{ActionPaste, KeyClipboardPaste},
 		{ActionExit, KeyCtrlC},
+		{ActionLineHome, KeyLineHome},
+		{ActionLineEnd, KeyLineEnd},
+		{ActionDeleteToLineEnd, KeyDeleteToLineEnd},
+		{ActionDeleteToLineStart, KeyDeleteToLineStart},
+		{ActionUndo, KeyUndo},
 	}
 	for _, item := range items {
 		if keyBindingMatches(key, k.Binding(item.action)) {
@@ -176,24 +193,46 @@ func (k *Keymap) Normalize(key Key) Key {
 }
 
 func keyBindingMatches(key Key, binding string) bool {
+	// OpenCode bindings may list multiple alternatives separated by commas.
+	for _, alt := range strings.Split(binding, ",") {
+		if singleKeyBindingMatches(key, strings.TrimSpace(alt)) {
+			return true
+		}
+	}
+	return false
+}
+
+func singleKeyBindingMatches(key Key, binding string) bool {
 	switch normalizeKeyName(binding) {
 	case "return":
 		return key.Kind == KeyEnter
+	case "shift+return", "ctrl+return", "alt+return":
+		return key.Kind == KeyCtrlJ
 	case "ctrl+j":
 		return key.Kind == KeyCtrlJ
 	case "ctrl+n":
 		return key.Kind == KeyCtrlN
-	case "backspace":
+	case "backspace", "shift+backspace":
 		return key.Kind == KeyBackspace
-	case "delete":
+	case "delete", "shift+delete":
+		return key.Kind == KeyDelete
+	case "ctrl+d":
 		return key.Kind == KeyDelete
 	case "alt+left", "ctrl+left":
 		return key.Kind == KeyWordLeft
+	case "alt+b":
+		return key.Kind == KeyWordLeft
 	case "alt+right", "ctrl+right":
+		return key.Kind == KeyWordRight
+	case "alt+f":
 		return key.Kind == KeyWordRight
 	case "ctrl+w":
 		return key.Kind == KeyDeleteWordBackward
-	case "ctrl+delete":
+	case "ctrl+backspace", "alt+backspace":
+		return key.Kind == KeyDeleteWordBackward
+	case "ctrl+delete", "alt+delete":
+		return key.Kind == KeyDeleteWordForward
+	case "alt+d":
 		return key.Kind == KeyDeleteWordForward
 	case "up":
 		return key.Kind == KeyUp
@@ -209,6 +248,8 @@ func keyBindingMatches(key Key, binding string) bool {
 		return key.Kind == KeyHome
 	case "end":
 		return key.Kind == KeyEnd
+	case "ctrl+alt+g":
+		return key.Kind == KeyMessageLast
 	case "ctrl+alt+y":
 		return key.Kind == KeyMessageLineUp
 	case "ctrl+alt+e":
@@ -218,6 +259,8 @@ func keyBindingMatches(key Key, binding string) bool {
 	case "ctrl+alt+d":
 		return key.Kind == KeyMessageHalfPageDown
 	case "ctrl+a":
+		return key.Kind == KeyLineHome
+	case "super+a":
 		return key.Kind == KeySelectAll
 	case "shift+left":
 		return key.Kind == KeySelectLeft
@@ -228,7 +271,13 @@ func keyBindingMatches(key Key, binding string) bool {
 	case "shift+down":
 		return key.Kind == KeySelectDown
 	case "ctrl+e":
-		return key.Kind == KeyCtrlE
+		return key.Kind == KeyLineEnd
+	case "ctrl+k":
+		return key.Kind == KeyDeleteToLineEnd
+	case "ctrl+u":
+		return key.Kind == KeyDeleteToLineStart
+	case "ctrl+-", "super+z":
+		return key.Kind == KeyUndo
 	case "ctrl+s":
 		return key.Kind == KeyStash
 	case "ctrl+c":
@@ -241,6 +290,8 @@ func keyBindingMatches(key Key, binding string) bool {
 		return false
 	case "ctrl+q":
 		return key.Kind == KeyCtrlQ
+	case "<leader>e":
+		return key.Kind == KeyOpenEditor
 	}
 	return false
 }

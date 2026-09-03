@@ -17,6 +17,8 @@ type Editor struct {
 	historyCursor int
 	saved         string
 	anchor        int
+	undoStack     []string
+	redoStack     []string
 }
 
 func (e *Editor) Anchor() int { return e.anchor }
@@ -38,6 +40,7 @@ func (e *Editor) Insert(value string) {
 	if len(runes) == 0 {
 		return
 	}
+	e.snapshot()
 	e.value = append(e.value[:e.cursor], append(runes, e.value[e.cursor:]...)...)
 	e.cursor += len(runes)
 }
@@ -46,6 +49,7 @@ func (e *Editor) Backspace() {
 	if e.cursor == 0 {
 		return
 	}
+	e.snapshot()
 	start := previousClusterStart(e.value, e.cursor)
 	e.value = append(e.value[:start], e.value[e.cursor:]...)
 	e.cursor = start
@@ -54,6 +58,7 @@ func (e *Editor) Delete() {
 	if e.cursor >= len(e.value) {
 		return
 	}
+	e.snapshot()
 	end := nextClusterEnd(e.value, e.cursor)
 	e.value = append(e.value[:e.cursor], e.value[end:]...)
 }
@@ -107,6 +112,39 @@ func (e *Editor) Home() { e.cursor = lineStart(e.value, e.cursor) }
 func (e *Editor) End()  { e.cursor = lineEnd(e.value, e.cursor) }
 func (e *Editor) Up()   { e.moveLine(-1) }
 func (e *Editor) Down() { e.moveLine(1) }
+func (e *Editor) DeleteToLineEnd() {
+	e.snapshot()
+	e.value = e.value[:e.cursor]
+}
+func (e *Editor) DeleteToLineStart() {
+	e.snapshot()
+	start := lineStart(e.value, e.cursor)
+	e.value = append(e.value[:start], e.value[e.cursor:]...)
+	e.cursor = start
+	e.anchor = -1
+}
+func (e *Editor) snapshot() {
+	if len(e.undoStack) == 0 || e.undoStack[len(e.undoStack)-1] != e.String() {
+		e.undoStack = append(e.undoStack, e.String())
+	}
+	e.redoStack = nil
+}
+func (e *Editor) Undo() {
+	if len(e.undoStack) == 0 {
+		return
+	}
+	e.redoStack = append(e.redoStack, e.String())
+	e.Set(e.undoStack[len(e.undoStack)-1])
+	e.undoStack = e.undoStack[:len(e.undoStack)-1]
+}
+func (e *Editor) Redo() {
+	if len(e.redoStack) == 0 {
+		return
+	}
+	e.undoStack = append(e.undoStack, e.String())
+	e.Set(e.redoStack[len(e.redoStack)-1])
+	e.redoStack = e.redoStack[:len(e.redoStack)-1]
+}
 func (e *Editor) AddHistory(value string) {
 	if strings.TrimSpace(value) == "" {
 		return

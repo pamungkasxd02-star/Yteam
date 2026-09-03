@@ -460,6 +460,28 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.editor.ClearAnchor()
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
+		case KeyLineHome:
+			ui.editor.Home()
+			ui.editor.ClearAnchor()
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
+		case KeyLineEnd:
+			ui.editor.End()
+			ui.editor.ClearAnchor()
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
+		case KeyDeleteToLineEnd:
+			ui.editor.DeleteToLineEnd()
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
+		case KeyDeleteToLineStart:
+			ui.editor.DeleteToLineStart()
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
+		case KeyUndo:
+			ui.editor.Undo()
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
 		case KeyUp:
 			if ui.autocomplete != nil && ui.autocomplete.Visible {
 				ui.autocomplete.Move(-1)

@@ -51,6 +51,12 @@ const (
 	KeySelectUp
 	KeySelectDown
 	KeySelectAll
+	KeyLineHome
+	KeyLineEnd
+	KeyDeleteToLineEnd
+	KeyDeleteToLineStart
+	KeyUndo
+	KeyRedo
 )
 
 type Key struct {
@@ -83,7 +89,7 @@ func (r *KeyReader) ReadKey() (Key, error) {
 	}
 	if data[0] == 1 {
 		r.pending = data[1:]
-		return Key{Kind: KeySelectAll}, nil
+		return Key{Kind: KeyLineHome}, nil
 	}
 	if data[0] == 13 {
 		r.pending = data[1:]
@@ -111,7 +117,7 @@ func (r *KeyReader) ReadKey() (Key, error) {
 	}
 	if data[0] == 5 {
 		r.pending = data[1:]
-		return Key{Kind: KeyCtrlE}, nil
+		return Key{Kind: KeyLineEnd}, nil
 	}
 	if data[0] == 17 {
 		r.pending = data[1:]
@@ -124,6 +130,18 @@ func (r *KeyReader) ReadKey() (Key, error) {
 	if data[0] == 12 {
 		r.pending = data[1:]
 		return Key{Kind: KeyCtrlL}, nil
+	}
+	if data[0] == 11 {
+		r.pending = data[1:]
+		return Key{Kind: KeyDeleteToLineEnd}, nil
+	}
+	if data[0] == 21 {
+		r.pending = data[1:]
+		return Key{Kind: KeyDeleteToLineStart}, nil
+	}
+	if data[0] == 31 {
+		r.pending = data[1:]
+		return Key{Kind: KeyUndo}, nil
 	}
 	if data[0] == 22 {
 		r.pending = data[1:]

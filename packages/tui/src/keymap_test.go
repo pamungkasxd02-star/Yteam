@@ -78,10 +78,51 @@ func TestPromptClearCanBeRemappedWithoutChangingExit(t *testing.T) {
 
 func TestMessageNavigationBindingsAreConfigurable(t *testing.T) {
 	keymap := DefaultKeymap()
-	if keymap.Binding(ActionFirst) != "ctrl+g" || keymap.Binding(ActionPageUp) != "pageup" || keymap.Binding(ActionPageDown) != "pagedown" {
+	// OpenCode binds messages_first to ctrl+g,home and messages_page_up/down to
+	// pageup/pagedown. Both ctrl+g and home must normalize to the first-message action.
+	if keymap.Binding(ActionFirst) != "ctrl+g,home" || keymap.Binding(ActionPageUp) != "pageup" || keymap.Binding(ActionPageDown) != "pagedown" {
 		t.Fatalf("message bindings = %#v", keymap.bindings)
 	}
 	if keymap.Normalize(Key{Kind: KeyCtrlG}).Kind != KeyMessageFirst {
 		t.Fatal("ctrl+g did not select first-message action")
+	}
+	if keymap.Normalize(Key{Kind: KeyHome}).Kind != KeyMessageFirst {
+		t.Fatal("home did not select first-message action")
+	}
+}
+
+func TestInputEditBindingsMatchOpenCode(t *testing.T) {
+	keymap := DefaultKeymap()
+	// OpenCode: ctrl+a = line home, super+a = select all, ctrl+e = line end.
+	if keymap.Binding(ActionLineHome) != "ctrl+a" {
+		t.Fatalf("line home = %q, want ctrl+a", keymap.Binding(ActionLineHome))
+	}
+	if keymap.Binding(ActionLineEnd) != "ctrl+e" {
+		t.Fatalf("line end = %q, want ctrl+e", keymap.Binding(ActionLineEnd))
+	}
+	if keymap.Binding(ActionSelectAll) != "super+a" {
+		t.Fatalf("select all = %q, want super+a", keymap.Binding(ActionSelectAll))
+	}
+	if keymap.Normalize(Key{Kind: KeyLineHome}).Kind != KeyLineHome {
+		t.Fatal("ctrl+a did not normalize to line home")
+	}
+	if keymap.Normalize(Key{Kind: KeyLineEnd}).Kind != KeyLineEnd {
+		t.Fatal("ctrl+e did not normalize to line end")
+	}
+	if keymap.Normalize(Key{Kind: KeySelectAll}).Kind != KeySelectAll {
+		t.Fatal("super+a did not normalize to select all")
+	}
+	// Delete-to-line-end/start and undo.
+	if keymap.Binding(ActionDeleteToLineEnd) != "ctrl+k" || keymap.Binding(ActionDeleteToLineStart) != "ctrl+u" {
+		t.Fatalf("delete-to-line bindings = %q/%q", keymap.Binding(ActionDeleteToLineEnd), keymap.Binding(ActionDeleteToLineStart))
+	}
+	if keymap.Normalize(Key{Kind: KeyDeleteToLineEnd}).Kind != KeyDeleteToLineEnd {
+		t.Fatal("ctrl+k did not normalize to delete-to-line-end")
+	}
+	if keymap.Normalize(Key{Kind: KeyDeleteToLineStart}).Kind != KeyDeleteToLineStart {
+		t.Fatal("ctrl+u did not normalize to delete-to-line-start")
+	}
+	if keymap.Normalize(Key{Kind: KeyUndo}).Kind != KeyUndo {
+		t.Fatal("ctrl+- did not normalize to undo")
 	}
 }
