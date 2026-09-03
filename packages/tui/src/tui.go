@@ -140,27 +140,29 @@ func (ui *UI) Run(ctx context.Context) error {
 		ui.draw()
 	}
 }
-
 func (ui *UI) startEventWatcher(ctx context.Context) {
-	journal := ui.app.EventJournal()
-	if journal == nil {
-		return
+	if journal := ui.app.EventJournal(); journal != nil {
+		eventsCh := journal.Subscribe(ctx)
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case ev, ok := <-eventsCh:
+					if !ok {
+						return
+					}
+					ui.mu.Lock()
+					ui.reducer.Apply(ev)
+					ui.mu.Unlock()
+					select {
+					case ui.redraw <- struct{}{}:
+					default:
+					}
+				}
+			}
+		}()
 	}
-	updates := journal.Subscribe(ctx)
-	go func() {
-		for event := range updates {
-			if event.Aggregate != "" && event.Aggregate != ui.app.CurrentSession().ID {
-				continue
-			}
-			ui.mu.Lock()
-			ui.reducer.Apply(event)
-			ui.mu.Unlock()
-			select {
-			case ui.redraw <- struct{}{}:
-			default:
-			}
-		}
-	}()
 }
 
 func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
