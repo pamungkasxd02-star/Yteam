@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -1336,20 +1337,26 @@ func (ui *UI) draw() {
 	ui.viewport.SetSize(width, height-6)
 	separator := Style(strings.Repeat("─", maxInt(width, 1)), FgGray)
 	if ui.route == RouteHome {
-		fmt.Fprintln(ui.out, Style("█▀▀█ █▀▀█ █▀▀█ █▀▀▄  █▀▀▀ █▀▀█ █▀▀█ █▀▀█", Bold, FgBrightCyan))
-		fmt.Fprintln(ui.out, Style("█__█ █__█ █^^^ █__█  █___ █__█ █__█ █^^^", Bold, FgBrightCyan))
-		fmt.Fprintln(ui.out, Style("▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀  ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀", Dim, FgCyan))
-		fmt.Fprintln(ui.out, separator)
-		fmt.Fprintln(ui.out, Style("⚡ YTEAM — Home", Bold, FgBrightWhite))
-		fmt.Fprintln(ui.out, Style("Enter a prompt to start a session. Type /help for commands.", FgGray))
-		fmt.Fprintln(ui.out, Style("Examples: 'Fix broken tests' or 'What is the tech stack of this project?'", Italic, FgGray))
+		fmt.Fprintln(ui.out, "")
+		fmt.Fprintln(ui.out, Style("  █▀▀█ █▀▀█ █▀▀█ █▀▀▄  █▀▀▀ █▀▀█ █▀▀█ █▀▀█", Bold, FgBrightCyan))
+		fmt.Fprintln(ui.out, Style("  █__█ █__█ █^^^ █__█  █___ █__█ █__█ █^^^", Bold, FgBrightCyan))
+		fmt.Fprintln(ui.out, Style("  ▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀  ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀", Dim, FgCyan))
+		fmt.Fprintln(ui.out, "  "+Style("⚡ YTEAM — Home (OpenCode Terminal)", Bold, FgBrightWhite))
+		fmt.Fprintln(ui.out, "  "+Style("Type a prompt to begin, or press Tab for completions.", FgGray))
+		fmt.Fprintln(ui.out, "")
+		fmt.Fprintln(ui.out, "  "+Style("Tips:", Bold, FgBrightYellow))
+		fmt.Fprintln(ui.out, "    "+Style("•", FgYellow)+" "+Style("/models", Bold, FgBrightCyan)+" — Select AI model or free tier")
+		fmt.Fprintln(ui.out, "    "+Style("•", FgYellow)+" "+Style("/agents", Bold, FgBrightGreen)+" — Switch agent mode (build, plan, explore)")
+		fmt.Fprintln(ui.out, "    "+Style("•", FgYellow)+" "+Style("@file", Bold, FgBrightMagenta)+"   — Reference project files or agents")
+		fmt.Fprintln(ui.out, "    "+Style("•", FgYellow)+" "+Style("Ctrl+J", Bold, FgBrightWhite)+"  — Insert multiline newline")
+		fmt.Fprintln(ui.out, "")
 	} else {
 		current := ui.app.CurrentSession()
 		title := current.Title
 		if title == "" {
 			title = "Untitled"
 		}
-		fmt.Fprintf(ui.out, "%s  %s %s\n", Style("⚡ YTEAM", Bold, FgBrightCyan), Style("Session:", Dim), Style(current.ID+" ("+title+")", Bold, FgBrightWhite))
+		fmt.Fprintf(ui.out, " %s  %s %s  %s\n", Style("⚡ opencode", Bold, FgBrightCyan), Style("session:", Dim), Style(current.ID, Bold, FgBrightWhite), Style("("+title+")", Italic, FgGray))
 		fmt.Fprintln(ui.out, separator)
 		messages := make([]MessageView, 0, len(ui.reducer.Messages))
 		for _, message := range ui.reducer.Messages {
@@ -1370,7 +1377,7 @@ func (ui *UI) draw() {
 		}
 		status := ui.reducer.Status
 		if status != "idle" {
-			fmt.Fprintf(ui.out, "\n%s %s\n", Style("●", FgBrightYellow), Style("status: "+status, Bold, FgYellow))
+			fmt.Fprintf(ui.out, "\n %s %s\n", Style("●", FgBrightYellow), Style("status: "+status, Bold, FgYellow))
 		}
 		if ui.jobMonitor != nil {
 			if pane := ui.jobMonitor.RenderSplitPane(ui.viewport.Width); pane != "" {
@@ -1450,19 +1457,31 @@ func (ui *UI) draw() {
 			fmt.Fprintln(ui.out, "Press esc to go back/reject")
 		}
 	}
+	// Render OpenCode style Footer & Status Bar
 	fmt.Fprintln(ui.out, separator)
-	fmt.Fprintf(ui.out, "%s %s  │  %s %s", Style("agent:", Dim), Style(ui.app.AgentName(), Bold, FgBrightGreen), Style("model:", Dim), Style(ui.app.ModelName(), Bold, FgBrightCyan))
+	dirName := filepath.Base(ui.app.Root)
+	if dirName == "" || dirName == "." {
+		dirName = ui.app.Root
+	}
+	fmt.Fprintf(ui.out, " %s %s  │  %s %s", Style("📁", FgGray), Style(dirName, Bold, FgBrightWhite), Style("🤖", FgGray), Style(ui.app.AgentName(), Bold, FgBrightGreen))
+	fmt.Fprintf(ui.out, "  │  %s %s", Style("⚡", FgGray), Style(ui.app.ModelName(), Bold, FgBrightCyan))
 	if variant := ui.app.VariantName(); variant != "" {
-		fmt.Fprintf(ui.out, "  │  %s %s", Style("variant:", Dim), Style(variant, Bold, FgYellow))
+		fmt.Fprintf(ui.out, " (%s)", Style(variant, FgYellow))
 	}
-	fmt.Fprintln(ui.out, "\n"+Style("Commands:", FgGray)+" "+Style("/help /models /variants /agents /sessions /new /editor /exit", Dim))
-	if ui.editor != nil {
-		fmt.Fprintf(ui.out, "%s %s", Style(">", Bold, FgBrightCyan), editorWithCaret(ui.editor))
-	} else {
-		fmt.Fprintf(ui.out, "%s ", Style(">", Bold, FgBrightCyan))
-	}
-}
+	fmt.Fprintln(ui.out, "  │  "+Style("esc: exit • /help • @files", Dim))
 
+	// Render OpenCode Style Prompt Box
+	boxWidth := maxInt(width-2, 40)
+	promptTop := "┌" + strings.Repeat("─", boxWidth-2) + "┐"
+	promptBot := "└" + strings.Repeat("─", boxWidth-2) + "┘"
+	fmt.Fprintln(ui.out, Style(promptTop, FgBrightCyan))
+	if ui.editor != nil {
+		fmt.Fprintf(ui.out, "│ %s\n", editorWithCaret(ui.editor))
+	} else {
+		fmt.Fprintln(ui.out, "│ ")
+	}
+	fmt.Fprintln(ui.out, Style(promptBot, FgBrightCyan))
+}
 func (ui *UI) Write(data []byte) (int, error) {
 	ui.mu.Lock()
 	defer ui.mu.Unlock()
