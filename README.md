@@ -41,42 +41,40 @@ go build -trimpath -o yteam.exe .\packages\opencode\src
 
 ### Interactive TUI Mode
 Start an interactive terminal session in the current directory:
+
+**Windows (CMD / Command Prompt):**
+```cmd
+yteam.exe
+```
+
+**Windows (PowerShell):**
+```powershell
+.\yteam.exe
+```
+
+**Linux / macOS:**
 ```bash
 ./yteam
 ```
 
 Start in a specific project with custom agent/model:
 ```bash
-./yteam -dir ./my-project -model mimo-v2.5-free -agent build
+yteam.exe -dir ./my-project -model mimo-v2.5-free -agent build
 ```
 
 ### CLI Subcommands
 Run headless commands, start servers, or manage sessions:
 
-```bash
-# Execute prompt directly
-./yteam run "Analyze the project structure and suggest improvements"
-
-# Start the local HTTP & SSE API server
-./yteam serve
-
-# List available models
-./yteam models
-
-# Manage durable sessions
-./yteam session list
-
-# Export session to markdown or json
-./yteam export md
-
-# Inspect MCP integrations
-./yteam mcp
-
-# View analytics and token metrics
-./yteam stats
-
-# Show help
-./yteam help
+```cmd
+:: Windows CMD / PowerShell / Linux
+yteam.exe run "Analyze the project structure and suggest improvements"
+yteam.exe serve
+yteam.exe models
+yteam.exe session list
+yteam.exe export md
+yteam.exe mcp
+yteam.exe stats
+yteam.exe help
 ```
 
 ---
