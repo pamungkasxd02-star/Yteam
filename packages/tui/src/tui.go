@@ -38,6 +38,7 @@ type UI struct {
 	transcript    []session.Message
 	picker        *Picker
 	pickerKind    string
+	stashDelete   int
 	editor        *Editor
 	reducer       *TranscriptReducer
 	redraw        chan struct{}
@@ -651,9 +652,15 @@ func (ui *UI) openStashPicker() error {
 		if len([]rune(preview)) > 50 {
 			preview = string([]rune(preview)[:50]) + "…"
 		}
-		items = append(items, PickerItem{ID: fmt.Sprintf("%d", index), Label: preview, Description: timeAgo(entry.Timestamp)})
+		description := timeAgo(entry.Timestamp)
+		lineCount := strings.Count(entry.Input, "\n") + 1
+		if lineCount > 1 {
+			description += " · ~" + fmt.Sprintf("%d", lineCount) + " lines"
+		}
+		items = append(items, PickerItem{ID: fmt.Sprintf("%d", index), Label: preview, Description: description})
 	}
 	ui.picker, ui.pickerKind = NewPicker("Stash", items), "stash"
+	ui.stashDelete = -1
 	return nil
 }
 
@@ -939,26 +946,65 @@ func (ui *UI) handlePickerKey(ctx context.Context, key Key) error {
 	switch key.Kind {
 	case KeyUp:
 		ui.picker.Move(-1)
+		ui.stashDelete = -1
 	case KeyDown:
 		ui.picker.Move(1)
+		ui.stashDelete = -1
 	case KeyPageUp:
 		ui.picker.Page(-1)
+		ui.stashDelete = -1
 	case KeyPageDown:
 		ui.picker.Page(1)
+		ui.stashDelete = -1
 	case KeyHome:
 		ui.picker.Home()
+		ui.stashDelete = -1
 	case KeyEnd:
 		ui.picker.End()
+		ui.stashDelete = -1
 	case KeyBackspace:
 		ui.picker.SetQuery(dropLastRune(ui.picker.Query))
 	case KeyText:
 		ui.picker.SetQuery(ui.picker.Query + key.Text)
+	case KeyDelete:
+		if ui.pickerKind == "stash" {
+			return ui.toggleStashDelete()
+		}
 	case KeyEscape:
 		ui.picker = nil
 		ui.pickerKind = ""
+		ui.stashDelete = -1
 	case KeyEnter:
 		return ui.selectPicker(ctx)
 	}
+	return nil
+}
+
+// toggleStashDelete implements OpenCode's stash.delete two-press confirmation.
+// The first press marks the highlighted entry for deletion; the second press
+// removes it from the stash.
+func (ui *UI) toggleStashDelete() error {
+	if ui.picker == nil || ui.pickerKind != "stash" {
+		return nil
+	}
+	item, ok := ui.picker.Selected()
+	if !ok {
+		return nil
+	}
+	index := atoi(item.ID)
+	entries := ui.promptStash.Entries()
+	if index < 0 || index >= len(entries) {
+		return nil
+	}
+	if ui.stashDelete == index {
+		ui.stashDelete = -1
+		if err := ui.promptStash.Remove(index); err != nil {
+			return err
+		}
+		// Rebuild the picker without the deleted entry.
+		return ui.openStashPicker()
+	}
+	ui.stashDelete = index
 	return nil
 }
 
@@ -1277,9 +1323,17 @@ func (ui *UI) draw() {
 			if index == ui.picker.Index {
 				marker = "> "
 			}
+			if ui.pickerKind == "stash" {
+				// Port of OpenCode's DialogStash: show the two-press delete
+				// confirmation hint on the highlighted entry.
+				entryIndex := atoi(item.ID)
+				if ui.stashDelete == entryIndex {
+					item.Label = "Press delete again to confirm"
+				}
+			}
 			fmt.Fprintf(ui.out, "%s%s — %s\n", marker, item.Label, item.Description)
 		}
-		fmt.Fprintln(ui.out, "Keys: up/down, /filter <text>, enter/select, esc")
+		fmt.Fprintln(ui.out, "Keys: up/down, /filter <text>, enter/select, delete, esc")
 	}
 	if ui.autocomplete != nil && ui.autocomplete.Visible {
 		fmt.Fprintf(ui.out, "\nAutocomplete %s: %s\n", ui.autocomplete.Kind, ui.autocomplete.Query)
