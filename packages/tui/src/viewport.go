@@ -143,33 +143,45 @@ func wrapText(value string, width int) []string {
 }
 func transcriptLines(messages []MessageView, width int) []string {
 	lines := []string{}
+	boxWidth := maxInt(width-4, 40)
 	for _, message := range messages {
-		header := message.Role
-		switch message.Role {
-		case "user":
-			header = Style("👤 You", Bold, FgBrightCyan)
-		case "assistant":
-			header = Style("🤖 Assistant", Bold, FgBrightGreen)
-		case "tool":
-			header = Style("🛠️ Tool ("+message.Content+")", Bold, FgBrightYellow)
-		case "system":
-			header = Style("⚙️ System", Bold, FgMagenta)
-		default:
-			header = Style(message.Role, Bold)
-		}
-		lines = append(lines, header)
-		if message.Reasoning != "" {
-			renderedThinking := RenderThinkingBlock(message.Reasoning)
-			for _, part := range strings.Split(renderedThinking, "\n") {
-				if part != "" {
-					lines = append(lines, wrapText(part, width)...)
+		if message.Role == "user" {
+			header := "  " + Style("👤 User", Bold, FgBrightWhite)
+			lines = append(lines, header)
+			for _, part := range strings.Split(message.Content, "\n") {
+				for _, wrapped := range wrapText(part, boxWidth) {
+					lines = append(lines, "    "+wrapped)
 				}
 			}
-		}
-		if message.Role != "tool" || message.Content != "" {
-			rendered := RenderMarkdownBlock(message.Content)
-			for _, part := range strings.Split(rendered, "\n") {
-				lines = append(lines, wrapText(part, width)...)
+		} else if message.Role == "assistant" {
+			header := "  " + Style("⚡ opencode", Bold, FgBrightCyan)
+			lines = append(lines, header)
+			if message.Reasoning != "" {
+				renderedThinking := RenderThinkingBlock(message.Reasoning)
+				for _, part := range strings.Split(renderedThinking, "\n") {
+					if part != "" {
+						lines = append(lines, "    "+part)
+					}
+				}
+			}
+			if message.Content != "" {
+				rendered := RenderMarkdownBlock(message.Content)
+				for _, part := range strings.Split(rendered, "\n") {
+					for _, wrapped := range wrapText(part, boxWidth) {
+						lines = append(lines, "    "+wrapped)
+					}
+				}
+			}
+		} else if message.Role == "tool" {
+			header := "    " + Style("🛠️ "+message.Content, Bold, FgBrightYellow)
+			lines = append(lines, header)
+		} else {
+			header := "  " + Style("⚙️ "+message.Role, Bold, FgMagenta)
+			lines = append(lines, header)
+			for _, part := range strings.Split(message.Content, "\n") {
+				for _, wrapped := range wrapText(part, boxWidth) {
+					lines = append(lines, "    "+wrapped)
+				}
 			}
 		}
 		lines = append(lines, "")
