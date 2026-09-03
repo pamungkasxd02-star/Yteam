@@ -16,14 +16,23 @@ type Editor struct {
 	history       []string
 	historyCursor int
 	saved         string
+	anchor        int
 }
 
-func NewEditor() *Editor           { return &Editor{historyCursor: -1} }
+func (e *Editor) Anchor() int { return e.anchor }
+
+func NewEditor() *Editor           { return &Editor{historyCursor: -1, anchor: -1} }
 func (e *Editor) String() string   { return string(e.value) }
 func (e *Editor) Empty() bool      { return strings.TrimSpace(e.String()) == "" }
 func (e *Editor) Cursor() int      { return e.cursor }
-func (e *Editor) Set(value string) { e.value = []rune(value); e.cursor = len(e.value) }
-func (e *Editor) Reset()           { e.value = nil; e.cursor = 0; e.historyCursor = -1; e.saved = "" }
+func (e *Editor) Set(value string) { e.value = []rune(value); e.cursor = len(e.value); e.anchor = -1 }
+func (e *Editor) Reset() {
+	e.value = nil
+	e.cursor = 0
+	e.historyCursor = -1
+	e.saved = ""
+	e.anchor = -1
+}
 func (e *Editor) Insert(value string) {
 	runes := []rune(value)
 	if len(runes) == 0 {
@@ -134,6 +143,46 @@ func (e *Editor) HistoryDown() bool {
 	e.Set(e.saved)
 	return true
 }
+
+func (e *Editor) SelectionRange() (int, int, bool) {
+	if e.anchor < 0 || e.anchor == e.cursor {
+		return 0, 0, false
+	}
+	if e.anchor < e.cursor {
+		return e.anchor, e.cursor, true
+	}
+	return e.cursor, e.anchor, true
+}
+
+func (e *Editor) SelectAll() {
+	if len(e.value) == 0 {
+		e.anchor = -1
+		e.cursor = 0
+		return
+	}
+	e.anchor = 0
+	e.cursor = len(e.value)
+}
+
+func (e *Editor) ShiftMove(fn func()) {
+	if e.anchor < 0 {
+		e.anchor = e.cursor
+	}
+	fn()
+}
+
+func (e *Editor) DeleteSelection() bool {
+	start, end, ok := e.SelectionRange()
+	if !ok {
+		return false
+	}
+	e.value = append(e.value[:start], e.value[end:]...)
+	e.cursor = start
+	e.anchor = -1
+	return true
+}
+
+func (e *Editor) ClearAnchor() { e.anchor = -1 }
 
 // openExternalEditor implements OpenCode's VISUAL/EDITOR prompt flow. The
 // caller owns terminal suspension/restoration around this operation.

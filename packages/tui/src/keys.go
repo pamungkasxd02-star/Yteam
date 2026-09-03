@@ -46,6 +46,11 @@ const (
 	KeyMessageHalfPageDown
 	KeyMessageFirst
 	KeyMessageLast
+	KeySelectLeft
+	KeySelectRight
+	KeySelectUp
+	KeySelectDown
+	KeySelectAll
 )
 
 type Key struct {
@@ -75,6 +80,10 @@ func (r *KeyReader) ReadKey() (Key, error) {
 	if data[0] == 3 {
 		r.pending = data[1:]
 		return Key{Kind: KeyCtrlC}, nil
+	}
+	if data[0] == 1 {
+		r.pending = data[1:]
+		return Key{Kind: KeySelectAll}, nil
 	}
 	if data[0] == 13 {
 		r.pending = data[1:]
@@ -217,6 +226,14 @@ func (r *KeyReader) csi(data []byte) (Key, error) {
 				return Key{Kind: KeyMessageHalfPageDown}, nil
 			case "1;7D":
 				return Key{Kind: KeyMessageHalfPageUp}, nil
+			case "1;2A":
+				return Key{Kind: KeySelectUp}, nil
+			case "1;2B":
+				return Key{Kind: KeySelectDown}, nil
+			case "1;2C":
+				return Key{Kind: KeySelectRight}, nil
+			case "1;2D":
+				return Key{Kind: KeySelectLeft}, nil
 			case "1;3D", "1;5D", "5D":
 				return Key{Kind: KeyWordLeft}, nil
 			case "1;3C", "1;5C", "5C":

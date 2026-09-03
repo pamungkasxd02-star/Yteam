@@ -290,6 +290,7 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.refreshAutocomplete()
 		case KeyCtrlJ:
 			ui.editor.Newline()
+			ui.editor.ClearAnchor()
 			ui.promptParts = nil
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
@@ -335,6 +336,7 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				}
 			}
 			ui.editor.Reset()
+			ui.editor.ClearAnchor()
 			ui.promptParts = nil
 			if strings.HasPrefix(text, "/") {
 				if ui.isPromptCommand(text) {
@@ -367,31 +369,69 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 				ui.promptDone <- ui.app.PromptWithParts(ctx, prompt, promptParts, ui)
 			}(expanded, parts)
 		case KeyBackspace:
+			if ui.editor.DeleteSelection() {
+				ui.rebaseEditorEdit(0, 0, "")
+				ui.editor.ClearAnchor()
+				ui.resetPromptHistoryNavigation()
+				ui.refreshAutocomplete()
+				break
+			}
 			start := previousClusterStart(ui.editor.value, ui.editor.cursor)
 			ui.rebaseEditorEdit(start, ui.editor.cursor, "")
 			ui.editor.Backspace()
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyDelete:
+			if ui.editor.DeleteSelection() {
+				ui.rebaseEditorEdit(0, 0, "")
+				ui.editor.ClearAnchor()
+				ui.resetPromptHistoryNavigation()
+				ui.refreshAutocomplete()
+				break
+			}
 			end := nextClusterEnd(ui.editor.value, ui.editor.cursor)
 			ui.rebaseEditorEdit(ui.editor.cursor, end, "")
 			ui.editor.Delete()
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
+		case KeySelectAll:
+			ui.editor.SelectAll()
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
+		case KeySelectLeft:
+			ui.editor.ShiftMove(ui.editor.Left)
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
+		case KeySelectRight:
+			ui.editor.ShiftMove(ui.editor.Right)
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
+		case KeySelectUp:
+			ui.editor.ShiftMove(ui.editor.Up)
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
+		case KeySelectDown:
+			ui.editor.ShiftMove(ui.editor.Down)
+			ui.resetPromptHistoryNavigation()
+			ui.refreshAutocomplete()
 		case KeyLeft:
 			ui.editor.Left()
+			ui.editor.ClearAnchor()
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyRight:
 			ui.editor.Right()
+			ui.editor.ClearAnchor()
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyWordLeft:
 			ui.editor.WordLeft()
+			ui.editor.ClearAnchor()
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyWordRight:
 			ui.editor.WordRight()
+			ui.editor.ClearAnchor()
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyDeleteWordBackward:
@@ -411,10 +451,12 @@ func (ui *UI) runRaw(ctx context.Context, file *os.File) error {
 			ui.refreshAutocomplete()
 		case KeyHome:
 			ui.editor.Home()
+			ui.editor.ClearAnchor()
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyEnd:
 			ui.editor.End()
+			ui.editor.ClearAnchor()
 			ui.resetPromptHistoryNavigation()
 			ui.refreshAutocomplete()
 		case KeyUp:
@@ -531,9 +573,17 @@ func (ui *UI) pasteFromClipboard() error {
 }
 
 func (ui *UI) insertEditorText(value string) {
-	start := ui.editor.Cursor()
+	start, end, hasSelection := ui.editor.SelectionRange()
+	if hasSelection {
+		ui.rebaseEditorEdit(start, end, value)
+		ui.editor.value = append(ui.editor.value[:start], append([]rune(value), ui.editor.value[end:]...)...)
+		ui.editor.cursor = start + len([]rune(value))
+		ui.editor.ClearAnchor()
+		return
+	}
 	ui.rebaseEditorEdit(start, start, value)
 	ui.editor.Insert(value)
+	ui.editor.ClearAnchor()
 }
 
 func (ui *UI) rebaseEditorEdit(start, end int, inserted string) {

@@ -29,6 +29,11 @@ const (
 	ActionHalfPageDown       Action = "messages.half_page_down"
 	ActionFirst              Action = "messages.first"
 	ActionLast               Action = "messages.last"
+	ActionSelectAll          Action = "input.select.all"
+	ActionSelectLeft         Action = "input.select.left"
+	ActionSelectRight        Action = "input.select.right"
+	ActionSelectUp           Action = "input.select.up"
+	ActionSelectDown         Action = "input.select.down"
 	ActionExit               Action = "app.exit"
 	ActionEditor             Action = "prompt.editor"
 	ActionStash              Action = "prompt.stash"
@@ -64,6 +69,11 @@ func DefaultKeymap() *Keymap {
 		ActionHalfPageDown:       "none",
 		ActionFirst:              "ctrl+g",
 		ActionLast:               "none",
+		ActionSelectAll:          "ctrl+a",
+		ActionSelectLeft:         "shift+left",
+		ActionSelectRight:        "shift+right",
+		ActionSelectUp:           "shift+up",
+		ActionSelectDown:         "shift+down",
 		ActionExit:               "ctrl+c",
 		ActionEditor:             "ctrl+e",
 		ActionStash:              "none",
@@ -147,6 +157,8 @@ func (k *Keymap) Normalize(key Key) Key {
 		{ActionLineUp, KeyMessageLineUp}, {ActionLineDown, KeyMessageLineDown},
 		{ActionHalfPageUp, KeyMessageHalfPageUp}, {ActionHalfPageDown, KeyMessageHalfPageDown},
 		{ActionFirst, KeyMessageFirst}, {ActionLast, KeyMessageLast},
+		{ActionSelectAll, KeySelectAll}, {ActionSelectLeft, KeySelectLeft}, {ActionSelectRight, KeySelectRight},
+		{ActionSelectUp, KeySelectUp}, {ActionSelectDown, KeySelectDown},
 		{ActionEditor, KeyOpenEditor},
 		{ActionStash, KeyStash},
 		{ActionClear, KeyClear},
@@ -205,6 +217,16 @@ func keyBindingMatches(key Key, binding string) bool {
 		return key.Kind == KeyMessageHalfPageUp
 	case "ctrl+alt+d":
 		return key.Kind == KeyMessageHalfPageDown
+	case "ctrl+a":
+		return key.Kind == KeySelectAll
+	case "shift+left":
+		return key.Kind == KeySelectLeft
+	case "shift+right":
+		return key.Kind == KeySelectRight
+	case "shift+up":
+		return key.Kind == KeySelectUp
+	case "shift+down":
+		return key.Kind == KeySelectDown
 	case "ctrl+e":
 		return key.Kind == KeyCtrlE
 	case "ctrl+s":
