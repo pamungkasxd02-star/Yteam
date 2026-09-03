@@ -45,6 +45,38 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 	switch {
+	case r.Method == http.MethodGet && (r.URL.Path == "/" || r.URL.Path == "/web"):
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YTEAM — OpenCode Web & API</title>
+  <style>
+    body { background: #0d1117; color: #c9d1d9; font-family: monospace; padding: 20px; }
+    h1 { color: #58a6ff; }
+    .box { border: 1px solid #30363d; background: #161b22; padding: 15px; border-radius: 6px; margin-top: 15px; }
+    pre { background: #010409; padding: 10px; border-radius: 4px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>⚡ YTEAM Backend Server Active</h1>
+  <div class="box">
+    <p>OpenCode-compatible HTTP REST & SSE streaming server is running.</p>
+    <h3>Available Endpoints:</h3>
+    <ul>
+      <li><code>GET /api/status</code> — System status</li>
+      <li><code>GET /api/models</code> — Available provider models</li>
+      <li><code>GET /api/session</code> — List sessions</li>
+      <li><code>GET /api/events</code> — Global SSE Event stream</li>
+      <li><code>GET /api/git</code> — Git status & branch</li>
+      <li><code>GET /api/tools</code> — Registered runner tools</li>
+    </ul>
+  </div>
+</body>
+</html>`))
 	case r.Method == http.MethodGet && r.URL.Path == "/api/status":
 		writeJSON(w, http.StatusOK, map[string]any{
 			"project": s.Runtime.Root,

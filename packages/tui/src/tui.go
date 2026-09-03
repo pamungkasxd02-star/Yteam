@@ -1336,10 +1336,13 @@ func (ui *UI) draw() {
 	ui.viewport.SetSize(width, height-6)
 	separator := Style(strings.Repeat("─", maxInt(width, 1)), FgGray)
 	if ui.route == RouteHome {
-		fmt.Fprintln(ui.out, Style("⚡ YTEAM", Bold, FgBrightCyan)+"  "+Style("Home — OpenCode Terminal", Dim))
+		fmt.Fprintln(ui.out, Style("█▀▀█ █▀▀█ █▀▀█ █▀▀▄  █▀▀▀ █▀▀█ █▀▀█ █▀▀█", Bold, FgBrightCyan))
+		fmt.Fprintln(ui.out, Style("█__█ █__█ █^^^ █__█  █___ █__█ █__█ █^^^", Bold, FgBrightCyan))
+		fmt.Fprintln(ui.out, Style("▀▀▀▀ █▀▀▀ ▀▀▀▀ ▀~~▀  ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀", Dim, FgCyan))
 		fmt.Fprintln(ui.out, separator)
-		fmt.Fprintln(ui.out, Style("Enter a prompt to start a session.", FgBrightWhite))
-		fmt.Fprintln(ui.out, Style("Tip:", Bold, FgYellow)+" "+Style("Type /help for available commands or @ to attach files", FgGray))
+		fmt.Fprintln(ui.out, Style("⚡ YTEAM — Home", Bold, FgBrightWhite))
+		fmt.Fprintln(ui.out, Style("Enter a prompt to start a session. Type /help for commands.", FgGray))
+		fmt.Fprintln(ui.out, Style("Examples: 'Fix broken tests' or 'What is the tech stack of this project?'", Italic, FgGray))
 	} else {
 		current := ui.app.CurrentSession()
 		title := current.Title
@@ -1376,10 +1379,15 @@ func (ui *UI) draw() {
 		}
 	}
 	if ui.picker != nil {
-		fmt.Fprintf(ui.out, "\n%s\nSearch: %s\n", Style(ui.picker.Title, Bold, FgBrightCyan), ui.picker.Query)
+		boxW := maxInt(width-4, 40)
+		topBorder := "┌─ " + ui.picker.Title + " " + strings.Repeat("─", maxInt(boxW-len(ui.picker.Title)-5, 1)) + "┐"
+		botBorder := "└" + strings.Repeat("─", boxW-2) + "┘"
+		fmt.Fprintln(ui.out, "\n"+Style(topBorder, Bold, FgBrightCyan))
+		fmt.Fprintf(ui.out, "│ %s %s\n", Style("Search:", Dim), ui.picker.Query)
+		fmt.Fprintln(ui.out, Style("├"+strings.Repeat("─", boxW-2)+"┤", FgGray))
 		items := ui.picker.Filtered()
 		if len(items) == 0 {
-			fmt.Fprintln(ui.out, "  (no results)")
+			fmt.Fprintln(ui.out, "│   (no matches)")
 		}
 		for index, item := range items {
 			marker := "  "
@@ -1387,19 +1395,17 @@ func (ui *UI) draw() {
 				marker = "> "
 			}
 			if ui.pickerKind == "stash" {
-				// Port of OpenCode's DialogStash: show the two-press delete
-				// confirmation hint on the highlighted entry.
 				entryIndex := atoi(item.ID)
 				if ui.stashDelete == entryIndex {
 					item.Label = "Press delete again to confirm"
 				}
 			}
-			fmt.Fprintf(ui.out, "%s%s — %s\n", marker, item.Label, item.Description)
+			fmt.Fprintf(ui.out, "│ %s%s — %s\n", marker, Style(item.Label, Bold), Style(item.Description, FgGray))
 		}
-		fmt.Fprintln(ui.out, "Keys: up/down, /filter <text>, enter/select, delete, esc")
+		fmt.Fprintln(ui.out, Style(botBorder, Bold, FgBrightCyan))
+		fmt.Fprintln(ui.out, Style("  ↑/↓: navigate • enter: select • esc: close • del: remove", Dim))
 	}
 	if ui.autocomplete != nil && ui.autocomplete.Visible {
-		fmt.Fprintf(ui.out, "\nAutocomplete %s: %s\n", ui.autocomplete.Kind, ui.autocomplete.Query)
 		for index, item := range ui.autocomplete.Items {
 			marker := "  "
 			if index == ui.autocomplete.Index {
