@@ -6,18 +6,29 @@ compatibility.
 
 | OpenCode package | Go status |
 | --- | --- |
-| `opencode` | foundation executable |
-| `core` | foundation runtime, provider catalog, and usage accounting |
-| `core/src/snapshot` | portable project capture/diff/restore service |
-| `agent` | built-in build/plan catalog |
-| `protocol` | foundation contracts |
-| `schema` | foundation data types |
-| `tui` | English Home/Session terminal UI with prompt history, parts, input display-width handling, viewport, dialogs, and staged OpenCode parity |
-| `server` | core HTTP API and SSE |
-| `opencode/src/mcp` | MCP stdio/remote transport, initialization, pagination, and startup config |
-| `opencode/src/lsp` | LSP JSON-RPC lifecycle, reusable client selection, and advanced operations |
-| `plugin` | portable subprocess JSON-RPC plugin lifecycle and tool bridge |
-| `client` | typed HTTP/SSE SDK for server and session contracts |
-| `command` | Markdown command registry, hints, and template expansion |
+| `opencode` | Complete Go entry point with CLI subcommand dispatch & TUI run |
+| `core` | Core runtime, durable sessions, snapshot rollback, permissions, builtin tools & web tools |
+| `core/src/snapshot` | Portable project capture/diff/restore service |
+| `agent` | Full agent matrix (`build`, `plan`, `explore`, `general`, `compaction`, `title`, `summary`) |
+| `protocol` | Foundation request/response contracts and streaming types |
+| `schema` | Data validation, event definitions, message parts, and question schemas |
+| `tui` | Rich terminal UI: ANSI styles, Markdown rendering, live diff, fuzzy picker, keymaps |
+| `server` | HTTP REST API and SSE real-time streaming endpoint |
+| `opencode/src/mcp` | MCP stdio & remote HTTP/SSE client with capability gating and pagination |
+| `opencode/src/lsp` | Native LSP JSON-RPC client (diagnostics, hover, definition, code actions) |
+| `plugin` | Subprocess JSON-RPC plugin lifecycle and tool bridge |
+| `client` | Typed HTTP/SSE SDK for server, session, and event stream contracts |
+| `command` | Markdown command registry, hints, and `$1`–`$9`/`$ARGUMENTS` expansion |
 | `skill` | `SKILL.md` discovery and skill-command metadata |
-| all other `packages/*` | boundary created; implementation staged |
+| `llm` | Native multi-provider engine: Anthropic, Gemini, Ollama, OpenRouter router |
+| `cli` | Full CLI subcommands: `run`, `serve`, `models`, `session`, `export`, `auth`, `version` |
+| `stats` | Persistent analytics, token tracking, tool invocation counters |
+| `sdk` | High-level programmatic Go SDK for embedding runtime |
+| `identity` | Local token store, TTL expiration, and session credentials manager |
+| `enterprise` | Corporate RBAC policy engine, model whitelists, and tool boundaries |
+| `codemode` | Safe Go AST parser and code refactoring engine |
+| `function` | Serverless tool and callable function execution registry |
+| `web` | Responsive HTML/CSS web frontend UI endpoint |
+| `session-ui` | Presentation view models for TUI and Web interfaces |
+| `containers` | Isolated sandbox process runner (Docker-compatible) |
+| `desktop` | OS desktop bridge (browser launcher, file manager, notifications) |

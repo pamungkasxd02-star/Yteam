@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goruntime "runtime"
 	"sort"
 	"strings"
 	"time"
@@ -116,6 +117,8 @@ func Builtins(p *permission.Engine) *Registry {
 	registry.Add(WriteFile{})
 	registry.Add(EditFile{})
 	registry.Add(Bash{})
+	registry.Add(NewWebFetch())
+	registry.Add(NewWebSearch())
 	return registry
 }
 
@@ -392,13 +395,19 @@ func (Bash) Execute(ctx context.Context, tc Context, raw json.RawMessage) (strin
 	return text, nil
 }
 func shellName() string {
-	if os.Getenv("ComSpec") != "" {
-		return os.Getenv("ComSpec")
+	if goruntime.GOOS == "windows" {
+		if comSpec := os.Getenv("ComSpec"); comSpec != "" {
+			return comSpec
+		}
+		return "cmd.exe"
+	}
+	if shell := os.Getenv("SHELL"); shell != "" {
+		return shell
 	}
 	return "/bin/sh"
 }
 func shellArg() string {
-	if os.Getenv("ComSpec") != "" {
+	if goruntime.GOOS == "windows" {
 		return "/C"
 	}
 	return "-c"

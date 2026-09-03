@@ -65,25 +65,60 @@ func (a *Autocomplete) options(kind AutocompleteKind, query, root string) []Pick
 	if kind == AutocompleteCommand {
 		commands := append([]PickerItem(nil), a.Commands...)
 		if len(commands) == 0 {
-			commands = []PickerItem{{ID: "/help", Label: "/help", Description: "Show help"}, {ID: "/status", Label: "/status", Description: "Show status"}, {ID: "/usage", Label: "/usage", Description: "Show provider usage"}, {ID: "/models", Label: "/models", Description: "Choose a model"}, {ID: "/variants", Label: "/variants", Description: "Choose a model variant"}, {ID: "/agents", Label: "/agents", Description: "Choose an agent"}, {ID: "/sessions", Label: "/sessions", Description: "Switch session"}, {ID: "/resume", Label: "/resume", Description: "Resume a session"}, {ID: "/continue", Label: "/continue", Description: "Continue a session"}, {ID: "/new", Label: "/new", Description: "Create a session"}, {ID: "/clear", Label: "/clear", Description: "Create a session"}, {ID: "/fork", Label: "/fork", Description: "Fork the current session"}, {ID: "/rename", Label: "/rename", Description: "Rename the current session"}, {ID: "/export", Label: "/export", Description: "Export the current session"}, {ID: "/history", Label: "/history", Description: "Show session history"}, {ID: "/stash", Label: "/stash", Description: "Stash or restore prompts"}, {ID: "/skills", Label: "/skills", Description: "List skills"}, {ID: "/mcps", Label: "/mcps", Description: "Show MCP integrations"}, {ID: "/lsp", Label: "/lsp", Description: "Show LSP integrations"}, {ID: "/plugins", Label: "/plugins", Description: "Show plugin integrations"}, {ID: "/editor", Label: "/editor", Description: "Open external editor"}, {ID: "/exit", Label: "/exit", Description: "Exit"}, {ID: "/quit", Label: "/quit", Description: "Exit"}, {ID: "/q", Label: "/q", Description: "Exit"}}
+			commands = []PickerItem{
+				{ID: "/models", Label: "/models", Description: "Select provider model"},
+				{ID: "/variants", Label: "/variants", Description: "Select model variant"},
+				{ID: "/agents", Label: "/agents", Description: "Select agent (build, plan)"},
+				{ID: "/sessions", Label: "/sessions", Description: "List and switch sessions"},
+				{ID: "/resume", Label: "/resume", Description: "Resume a session"},
+				{ID: "/continue", Label: "/continue", Description: "Continue a session"},
+				{ID: "/new", Label: "/new", Description: "Start a new session"},
+				{ID: "/fork", Label: "/fork", Description: "Fork current session"},
+				{ID: "/rename", Label: "/rename", Description: "Rename current session"},
+				{ID: "/diff", Label: "/diff", Description: "View git working tree diff"},
+				{ID: "/git", Label: "/git", Description: "View git status and branch"},
+				{ID: "/mcps", Label: "/mcps", Description: "Show MCP server status and tools"},
+				{ID: "/lsp", Label: "/lsp", Description: "Show LSP server status"},
+				{ID: "/plugins", Label: "/plugins", Description: "Show plugin status"},
+				{ID: "/skills", Label: "/skills", Description: "List available skills"},
+				{ID: "/status", Label: "/status", Description: "Show current session and model info"},
+				{ID: "/usage", Label: "/usage", Description: "Show token usage statistics"},
+				{ID: "/stash", Label: "/stash", Description: "Save or view stashed prompts"},
+				{ID: "/editor", Label: "/editor", Description: "Open external editor"},
+				{ID: "/clear", Label: "/clear", Description: "Clear conversation or prompt"},
+				{ID: "/help", Label: "/help", Description: "Show available commands"},
+				{ID: "/exit", Label: "/exit", Description: "Exit application"},
+			}
 		}
 		return filterAutocomplete(commands, query)
 	}
-	if root == "" {
-		return filterAutocomplete(a.Agents, query)
-	}
-	items := append([]PickerItem(nil), a.Agents...)
-	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
-		if err != nil || entry.IsDir() {
-			return nil
-		}
-		relative, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return nil
-		}
-		items = append(items, PickerItem{ID: relative, Label: relative, Description: "file"})
+	if kind != AutocompleteFile {
 		return nil
-	})
+	}
+	var items []PickerItem
+	for _, agent := range a.Agents {
+		items = append(items, agent)
+	}
+	if root != "" {
+		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info == nil {
+				return nil
+			}
+			rel, relErr := filepath.Rel(root, path)
+			if relErr != nil || rel == "." {
+				return nil
+			}
+			if info.IsDir() {
+				if info.Name() == ".git" || info.Name() == "node_modules" || info.Name() == ".yteam" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			itemPath := filepath.ToSlash(rel)
+			items = append(items, PickerItem{ID: "@" + itemPath, Label: "@" + itemPath, Description: rel})
+			return nil
+		})
+	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	return filterAutocomplete(items, query)
 }
@@ -102,9 +137,6 @@ func filterAutocomplete(items []PickerItem, query string) []PickerItem {
 		if strings.Contains(value, strings.ReplaceAll(query, "\\", "/")) {
 			result = append(result, item)
 		}
-	}
-	if len(result) > 20 {
-		return result[:20]
 	}
 	return result
 }
@@ -143,10 +175,10 @@ func (a *Autocomplete) Accept(editor *Editor) bool {
 	}
 	replacement := item.ID
 	if a.Kind == AutocompleteFile {
-		replacement = "@" + replacement
-	}
-	if a.Kind == AutocompleteCommand {
-		replacement = item.ID
+		replacement = "@" + strings.TrimPrefix(item.ID, "@")
+		if filepath.Separator == '\\' {
+			replacement = "@" + filepath.FromSlash(strings.TrimPrefix(replacement, "@"))
+		}
 	}
 	next := append([]rune{}, value[:start]...)
 	next = append(next, []rune(replacement)...)

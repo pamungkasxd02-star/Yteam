@@ -25,17 +25,59 @@ func NewPicker(title string, items []PickerItem) *Picker {
 	return picker
 }
 
+func fuzzyMatch(pattern, text string) (bool, int) {
+	if pattern == "" {
+		return true, 0
+	}
+	pIdx := 0
+	pRunes := []rune(strings.ToLower(pattern))
+	tRunes := []rune(strings.ToLower(text))
+	score := 0
+	consecutive := 0
+
+	for i, tr := range tRunes {
+		if pIdx < len(pRunes) && tr == pRunes[pIdx] {
+			pIdx++
+			score += 10 + (consecutive * 5)
+			if i == 0 || tRunes[i-1] == ' ' || tRunes[i-1] == '_' || tRunes[i-1] == '-' || tRunes[i-1] == '/' {
+				score += 20
+			}
+			consecutive++
+		} else {
+			consecutive = 0
+		}
+	}
+	return pIdx == len(pRunes), score
+}
+
 func (p *Picker) Filtered() []PickerItem {
-	query := strings.ToLower(strings.TrimSpace(p.Query))
+	query := strings.TrimSpace(p.Query)
 	if query == "" {
 		return append([]PickerItem(nil), p.Items...)
 	}
-	result := make([]PickerItem, 0, len(p.Items))
+	type scoredItem struct {
+		item  PickerItem
+		score int
+	}
+	matches := make([]scoredItem, 0, len(p.Items))
 	for _, item := range p.Items {
-		value := strings.ToLower(item.ID + " " + item.Label + " " + item.Description)
-		if strings.Contains(value, query) {
-			result = append(result, item)
+		target := item.ID + " " + item.Label + " " + item.Description
+		matched, score := fuzzyMatch(query, target)
+		if matched {
+			matches = append(matches, scoredItem{item: item, score: score})
 		}
+	}
+	// Sort highest score first
+	for i := 0; i < len(matches); i++ {
+		for j := i + 1; j < len(matches); j++ {
+			if matches[j].score > matches[i].score {
+				matches[i], matches[j] = matches[j], matches[i]
+			}
+		}
+	}
+	result := make([]PickerItem, len(matches))
+	for i, m := range matches {
+		result[i] = m.item
 	}
 	return result
 }

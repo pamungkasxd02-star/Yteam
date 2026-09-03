@@ -28,6 +28,7 @@ type Model struct {
 	Created            int64                   `json:"created,omitempty"`
 	OwnedBy            string                  `json:"owned_by,omitempty"`
 	Name               string                  `json:"name,omitempty"`
+	Description        string                  `json:"description,omitempty"`
 	Provider           string                  `json:"provider,omitempty"`
 	ContextWindow      int                     `json:"context_window,omitempty"`
 	MaxOutputTokens    int                     `json:"max_output_tokens,omitempty"`

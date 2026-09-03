@@ -96,7 +96,8 @@ func isWideRune(value rune) bool {
 }
 
 func displayWidth(value string) int {
-	runes := []rune(value)
+	clean := StripANSI(value)
+	runes := []rune(clean)
 	width := 0
 	for _, unit := range textUnits(runes) {
 		width += unit.Width

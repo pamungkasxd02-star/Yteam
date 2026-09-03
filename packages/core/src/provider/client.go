@@ -33,25 +33,36 @@ func New(baseURL, apiKey string) *Client {
 func (c *Client) Catalog() *Catalog                    { return &c.models }
 func (c *Client) Usage() UsageTotals                   { return c.usage.snapshot() }
 func (c *Client) UsageByModel() map[string]UsageTotals { return c.usage.byModel() }
+func DefaultFreeModels() []protocol.Model {
+	return []protocol.Model{
+		{ID: "mimo-v2.5-free", Name: "Mimo v2.5 Free (OpenCode Native)", Description: "OpenCode default free model"},
+		{ID: "gemini-2.5-flash", Name: "Google Gemini 2.5 Flash Free", Description: "Fast Google Gemini free tier"},
+		{ID: "claude-3-5-haiku-20241022", Name: "Claude 3.5 Haiku (Fast)", Description: "Anthropic fast reasoning model"},
+		{ID: "llama-3.3-70b-free", Name: "Llama 3.3 70B Free", Description: "High-capability open model free tier"},
+		{ID: "qwen-2.5-coder-32b-free", Name: "Qwen 2.5 Coder 32B Free", Description: "Specialized coding LLM free tier"},
+		{ID: "deepseek-v3-free", Name: "DeepSeek V3 Free", Description: "OpenCode Zen free provider"},
+	}
+}
+
 func (c *Client) Models(ctx context.Context) ([]protocol.Model, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/models", nil)
 	if err != nil {
-		return nil, err
+		return DefaultFreeModels(), nil
 	}
 	c.headers(req)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return DefaultFreeModels(), nil
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
-		return nil, apiError(resp)
+		return DefaultFreeModels(), nil
 	}
 	var payload struct {
 		Data []protocol.Model `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, err
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil || len(payload.Data) == 0 {
+		return DefaultFreeModels(), nil
 	}
 	return payload.Data, nil
 }

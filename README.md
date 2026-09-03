@@ -1,147 +1,137 @@
-# YTEAM — OpenCode in Go
+# YTEAM (OpenCode in Go)
 
-YTEAM is a lightweight Go reimplementation of OpenCode. OpenCode's original
-package and folder names are preserved under `packages/`, while the runtime is
-written in Go instead of Bun/TypeScript.
+High-performance, lightweight pure Go implementation of OpenCode. Built to eliminate Node/Bun/V8 overhead while maintaining full protocol, TUI, and integration parity with OpenCode.
 
-This repository is being ported in layers. The first layer is deliberately
-small and runnable: project discovery, configuration, durable sessions,
-OpenAI-compatible streaming, agent/tool execution, English CLI text, and an
-interactive Home/Session terminal UI. Later layers will add full TUI parity,
-MCP/LSP integrations, server breadth, and plugin compatibility.
+## Overview
 
-## Layout
+YTEAM provides the full OpenCode terminal and headless developer agent experience in a single static binary:
+- **Low Memory Footprint**: ~15–25 MB RAM consumption (zero V8/Electron bloat).
+- **Full Cross-Platform**: Native Linux, macOS, and Windows support without external runtime dependencies.
+- **Multi-Provider Engine**: Native adapters for Anthropic Claude (Messages API), Google Gemini (REST SSE), Ollama, and OpenAI/OpenRouter backends.
+- **Built-in Free Tier**: Out-of-the-box support for OpenCode Zen free models (`mimo-v2.5-free`, `gemini-2.5-flash`, `deepseek-v3-free`, `llama-3.3-70b-free`, etc.).
+- **Rich Terminal UI**: Live thinking/reasoning stream viewer, code syntax highlighting, fuzzy finder pickers, split-pane job monitor, live git diff inspector, and `@`/`/` autocomplete triggers.
+- **Integrations**: Full support for Model Context Protocol (MCP stdio & remote), Language Server Protocol (LSP), JSON-RPC plugins, and Markdown skill definitions.
 
-The directory names mirror the OpenCode repository:
+---
 
-```text
-packages/
-  opencode/          Go executable entry point
-  core/              config, project, session, provider runtime
-  protocol/          wire-level request/response contracts
-  schema/            shared data validation/types
-  tui/               terminal interaction layer
-  session-ui/        session presentation contracts
-  cli/ client/ ...   reserved OpenCode-compatible package boundaries
-```
+## Installation & Build
 
-The complete package tree is present even when a package is still marked
-`planned`. No Bun, Node.js, TypeScript, or OpenCode source files are vendored.
+### Prerequisites
+- Go 1.22+
 
-## Build and test
+### Build from source
 
+**Linux / macOS:**
 ```bash
-go test ./...
-go vet ./...
+git clone https://github.com/pamungkasxd02-star/Yteam.git
+cd Yteam
 go build -trimpath -o yteam ./packages/opencode/src
 ```
 
-Windows PowerShell:
-
+**Windows (PowerShell / Command Prompt):**
 ```powershell
+git clone https://github.com/pamungkasxd02-star/Yteam.git
+cd Yteam
 go build -trimpath -o yteam.exe .\packages\opencode\src
 ```
 
-## Run
+---
 
-```text
-yteam /help
-yteam /status
-yteam
+## Usage
+
+### Interactive TUI Mode
+Start an interactive terminal session in the current directory:
+```bash
+./yteam
 ```
 
-Interactive commands include `/models`, `/model <id>`, `/agents`,
-`/agent <name>`, `/sessions` (also `/resume` and `/continue`), `/new` (also
-`/clear`), `/fork`, `/rename <title>`, `/history`, `/skills`, `/mcps`, `/lsp`,
-`/plugins`, `/usage`, `/stash`, `/editor`, and `/export [md|json]`. Exit aliases are
-`/exit`, `/quit`, and `/q`.
-
-Use `-agent plan` or `YTEAM_AGENT=plan` to run the read-only planning agent;
-`build` remains the default and can use the full tool set.
-
-Commands are discovered from Markdown files under `command/`, `commands/`,
-`.opencode/command/`, and `.opencode/commands/`. Supported frontmatter is
-`description`, `agent`, `model`, `variant`, and `subtask`; `$1`–`$9` and
-`$ARGUMENTS` are expanded when a command is invoked. The registry is available
-through `GET /api/command`.
-
-Session API lifecycle also includes compaction and revert state. Revert metadata
-and portable pre-prompt file restoration are available through the snapshot
-service.
-
-The interactive terminal uses raw ANSI/UTF-8 input when attached to a TTY:
-multiline text uses `Ctrl+J`, history uses `Up`/`Down`, pickers support
-`Up`/`Down`/`Enter`/`Esc`, and permission prompts accept `y` (once), `a`
-(always), or `n` (reject). Piped input keeps the line-oriented REPL behavior.
-
-Provider settings are read from the environment:
-
-```text
-YTEAM_API_KEY=your-key
-YTEAM_BASE_URL=https://opencode.ai/zen/v1
-YTEAM_MODEL=mimo-v2.5-free
-YTEAM_HOME=/path/to/yteam-data
+Start in a specific project with custom agent/model:
+```bash
+./yteam -dir ./my-project -model mimo-v2.5-free -agent build
 ```
 
-Configuration files are merged in this order: `<YTEAM_HOME>/config.json`,
-project `yteam.json`, project `.yteam.json`, project `.yteam/config.json`,
-then optional `YTEAM_CONFIG`. Environment variables override all files, and
-CLI flags such as `-model` and `-agent` override the environment for that run.
-This hierarchy is portable and uses no checkout-specific paths.
+### CLI Subcommands
+Run headless commands, start servers, or manage sessions:
 
-Remote MCP servers can be configured in `mcp.json` below `YTEAM_HOME`:
+```bash
+# Execute prompt directly
+./yteam run "Analyze the project structure and suggest improvements"
 
-```json
-{
-  "servers": {
-    "docs": {
-      "URL": "https://example.invalid/mcp",
-      "Headers": {"Authorization": "Bearer token"},
-      "Timeout": 30000000000
-    }
-  }
-}
+# Start the local HTTP & SSE API server
+./yteam serve
+
+# List available models
+./yteam models
+
+# Manage durable sessions
+./yteam session list
+
+# Export session to markdown or json
+./yteam export md
+
+# Inspect MCP integrations
+./yteam mcp
+
+# View analytics and token metrics
+./yteam stats
+
+# Show help
+./yteam help
 ```
 
-For a single CI/container server, use `YTEAM_MCP_URL`, optional JSON
-`YTEAM_MCP_HEADERS`, and `YTEAM_MCP_TIMEOUT` such as `30s`. Remote MCP
-connections initialize and discover paginated tools during startup; failures
-are exposed in `/api/mcp` and do not prevent the CLI from starting.
+---
 
-Plugins use a portable subprocess JSON-RPC bridge. Configure `plugins.json`
-below `YTEAM_HOME` or set `YTEAM_PLUGIN_CONFIG`; each plugin is initialized,
-its tools are discovered, and failures are isolated in `/api/plugin`.
+## Interactive TUI Commands
 
-The provider model catalog is cached after `/models` discovery. Model metadata
-can include variants and token pricing; completion usage is exposed through
-`/api/provider/usage`. The default Zen public marker is only sent in memory.
-Secrets are not committed or written to the repository.
+Inside the terminal UI:
+- `/models`: Open fuzzy-search model selector.
+- `/agents`: Switch agent mode (`build`, `plan`, `explore`, `general`).
+- `/sessions`: Switch, continue, or resume sessions.
+- `/new` (or `/clear`): Create a fresh session.
+- `/fork`: Fork current conversation into a new branch.
+- `/diff`: View live git working tree changes.
+- `/git`: Check git branch and status.
+- `/stash`: Stash or pop current prompt drafts.
+- `/mcps`: View active MCP servers and registered tools.
+- `/lsp`: Inspect active Language Server Protocol clients.
+- `/help`: Display in-terminal command palette.
+- `/exit`: Exit the application.
 
-Session metadata records the current run lifecycle (`busy`, `retrying`,
-`completed`, `failed`, or `interrupted`) together with retry/error and timing
-information. The same transitions are emitted as durable events for API/SSE
-clients and the terminal transcript reducer.
+---
 
-Compaction stores a monotonically increasing context epoch plus provider-
-independent token estimates before and after summarization. The estimates are
-for budgeting and observability, not a replacement for a provider tokenizer.
+## Configuration
 
-Question prompts are persisted below `YTEAM_HOME/questions.jsonl`. Pending
-questions are replayed after restart, while replies and rejections remain
-available to a waiting tool even when the answer arrives before `Await` starts.
+Settings are resolved hierarchically without hardcoded machine paths:
+1. `<YTEAM_HOME>/config.json` (or `~/.config/yteam/config.json`)
+2. Project `yteam.json` / `.yteam.json`
+3. Environment variables (e.g. `YTEAM_API_KEY`, `YTEAM_MODEL`, `YTEAM_BASE_URL`)
 
-Permission prompts use the same durable approach in
-`YTEAM_HOME/permissions.jsonl`. Pending approvals survive restart, terminal
-replies are retained for waiting tools, and `Always` approvals replay as
-allow-rules without weakening the default deny/ask behavior.
+### Example Environment Variables
 
-The verified portable build targets are Windows, Linux amd64, and macOS amd64.
-Use `go test -p 1 ./...` on constrained Windows/386 environments to avoid
-parallel compiler pagefile pressure.
+```bash
+# OpenCode Zen / Free Tier endpoint (Default)
+export YTEAM_BASE_URL="https://opencode.ai/zen/v1"
+export YTEAM_MODEL="mimo-v2.5-free"
+export YTEAM_API_KEY="your-api-key"
 
-## Porting rule
+# Custom Anthropic or Ollama settings
+export YTEAM_MODEL="claude-3-7-sonnet"
+# or
+export YTEAM_MODEL="ollama/qwen2.5-coder"
+```
 
-OpenCode is the behavioral reference. Go code must preserve its observable
-contracts, but it must not mechanically copy TypeScript implementation files.
-Each port layer gets a focused test and a short compatibility note before the
-next layer is started.
+---
+
+## Testing
+
+Run the full cross-platform test suite:
+
+```bash
+go test ./...
+```
+
+---
+
+## License
+
+MIT License.

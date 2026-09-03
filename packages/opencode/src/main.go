@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	clipkg "github.com/pamungkasxd02-star/Yteam/packages/cli/src"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/config"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/event"
 	"github.com/pamungkasxd02-star/Yteam/packages/core/src/project"
@@ -23,6 +24,16 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 {
+		first := strings.ToLower(os.Args[1])
+		if first == "run" || first == "serve" || first == "models" || first == "session" || first == "export" || first == "import" || first == "auth" || first == "mcp" || first == "stats" || first == "web" || first == "agent" || first == "agents" || first == "providers" || first == "version" || first == "--version" || first == "-v" || first == "help" || first == "--help" || first == "-h" {
+			if err := clipkg.Dispatch(context.Background(), os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil {
+				fail(err)
+			}
+			return
+		}
+	}
+
 	dir := flag.String("dir", "", "direktori proyek")
 	model := flag.String("model", "", "ID model")
 	agent := flag.String("agent", "", "nama agent")

@@ -58,9 +58,9 @@ type UI struct {
 	questionText  map[int]string
 	questionMode  bool
 	questionDone  bool
+	jobMonitor    *JobMonitor
 	exitRequested bool
 }
-
 func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	reducer := NewTranscriptReducer()
 	current := app.CurrentSession()
@@ -91,7 +91,7 @@ func New(app *runtime.Runtime, in io.Reader, out io.Writer) *UI {
 	history, _ := OpenPromptHistory(app.Config.Home)
 	stash, _ := OpenPromptStash(app.Config.Home)
 	keymap, _ := LoadKeymap(app.Config.Home)
-	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, keymap: keymap, clipboardRead: readSystemClipboard, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1), promptHistory: history, promptStash: stash, viewport: NewViewport(80, 18)}
+	return &UI{app: app, in: in, out: out, route: RouteHome, transcript: current.Messages, editor: NewEditor(), reducer: reducer, redraw: make(chan struct{}, 1), autocomplete: autocomplete, keymap: keymap, clipboardRead: readSystemClipboard, questionSet: map[int]map[int]bool{}, questionText: map[int]string{}, promptDone: make(chan error, 1), promptHistory: history, promptStash: stash, viewport: NewViewport(80, 18), jobMonitor: NewJobMonitor()}
 }
 
 func (ui *UI) Run(ctx context.Context) error {
@@ -1076,6 +1076,37 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 	case "/plugins":
 		data, _ := json.MarshalIndent(ui.app.Plugins(), "", "  ")
 		fmt.Fprintln(ui.out, string(data))
+	case "/diff":
+		diffText, err := ui.app.GitDiff(ctx)
+		if err != nil {
+			fmt.Fprintln(ui.out, Style("Git not available or not a git repository", FgGray))
+			return true, nil
+		}
+		if strings.TrimSpace(diffText) == "" {
+			fmt.Fprintln(ui.out, Style("No changes in working tree", FgGray))
+			return true, nil
+		}
+		for _, line := range strings.Split(diffText, "\n") {
+			fmt.Fprintln(ui.out, RenderDiffLine(line))
+		}
+		return true, nil
+	case "/git":
+		st, err := ui.app.GitStatus(ctx)
+		if err != nil {
+			fmt.Fprintln(ui.out, Style("Git not available or not a git repository", FgGray))
+			return true, nil
+		}
+		fmt.Fprintf(ui.out, "%s %s\n", Style("Branch:", Bold, FgBrightCyan), st.Branch)
+		if strings.TrimSpace(st.Porcelain) == "" {
+			fmt.Fprintln(ui.out, Style("Working tree clean", FgGreen))
+		} else {
+			fmt.Fprintln(ui.out, Style("Status:", Bold, FgYellow))
+			for _, line := range strings.Split(st.Porcelain, "\n") {
+				if line != "" {
+					fmt.Fprintln(ui.out, "  "+line)
+				}
+			}
+		}
 		return true, nil
 	case "/skills":
 		items, err := ui.app.Skills()
@@ -1208,6 +1239,7 @@ func (ui *UI) command(ctx context.Context, line string) (bool, error) {
 	default:
 		return ui.app.Command(ctx, line, ui.out)
 	}
+	return true, nil
 }
 
 func (ui *UI) handlePickerLine(ctx context.Context, line string) error {
@@ -1302,15 +1334,19 @@ func (ui *UI) draw() {
 	}
 	width, height := terminalSize(ui.terminal)
 	ui.viewport.SetSize(width, height-6)
-	separator := strings.Repeat("─", maxInt(width, 1))
+	separator := Style(strings.Repeat("─", maxInt(width, 1)), FgGray)
 	if ui.route == RouteHome {
-		fmt.Fprintln(ui.out, "YTEAM  Home")
-		fmt.Fprintln(ui.out, "")
-		fmt.Fprintln(ui.out, "Enter a prompt to start a session.")
-		fmt.Fprintln(ui.out, "Example: Inspect this project's structure")
+		fmt.Fprintln(ui.out, Style("⚡ YTEAM", Bold, FgBrightCyan)+"  "+Style("Home — OpenCode Terminal", Dim))
+		fmt.Fprintln(ui.out, separator)
+		fmt.Fprintln(ui.out, Style("Enter a prompt to start a session.", FgBrightWhite))
+		fmt.Fprintln(ui.out, Style("Tip:", Bold, FgYellow)+" "+Style("Type /help for available commands or @ to attach files", FgGray))
 	} else {
 		current := ui.app.CurrentSession()
-		fmt.Fprintf(ui.out, "YTEAM  Session %s\n", current.ID)
+		title := current.Title
+		if title == "" {
+			title = "Untitled"
+		}
+		fmt.Fprintf(ui.out, "%s  %s %s\n", Style("⚡ YTEAM", Bold, FgBrightCyan), Style("Session:", Dim), Style(current.ID+" ("+title+")", Bold, FgBrightWhite))
 		fmt.Fprintln(ui.out, separator)
 		messages := make([]MessageView, 0, len(ui.reducer.Messages))
 		for _, message := range ui.reducer.Messages {
@@ -1318,11 +1354,11 @@ func (ui *UI) draw() {
 			if message.Role == "tool" && content == "" {
 				content = message.ToolName
 			}
-			messages = append(messages, MessageView{Role: message.Role, Content: content})
+			messages = append(messages, MessageView{Role: message.Role, Content: content, Reasoning: message.Reasoning})
 		}
 		if len(messages) == 0 {
 			for _, message := range ui.transcript {
-				messages = append(messages, MessageView{Role: message.Role, Content: message.Content})
+				messages = append(messages, MessageView{Role: message.Role, Content: message.Content, Reasoning: message.Reasoning})
 			}
 		}
 		ui.viewport.SetLines(transcriptLines(messages, ui.viewport.Width))
@@ -1331,11 +1367,16 @@ func (ui *UI) draw() {
 		}
 		status := ui.reducer.Status
 		if status != "idle" {
-			fmt.Fprintf(ui.out, "\nstatus: %s\n", status)
+			fmt.Fprintf(ui.out, "\n%s %s\n", Style("●", FgBrightYellow), Style("status: "+status, Bold, FgYellow))
+		}
+		if ui.jobMonitor != nil {
+			if pane := ui.jobMonitor.RenderSplitPane(ui.viewport.Width); pane != "" {
+				fmt.Fprintln(ui.out, "\n"+pane)
+			}
 		}
 	}
 	if ui.picker != nil {
-		fmt.Fprintf(ui.out, "\n%s\nSearch: %s\n", ui.picker.Title, ui.picker.Query)
+		fmt.Fprintf(ui.out, "\n%s\nSearch: %s\n", Style(ui.picker.Title, Bold, FgBrightCyan), ui.picker.Query)
 		items := ui.picker.Filtered()
 		if len(items) == 0 {
 			fmt.Fprintln(ui.out, "  (no results)")
@@ -1404,15 +1445,15 @@ func (ui *UI) draw() {
 		}
 	}
 	fmt.Fprintln(ui.out, separator)
-	fmt.Fprintf(ui.out, "agent: %s  |  model: %s", ui.app.AgentName(), ui.app.ModelName())
+	fmt.Fprintf(ui.out, "%s %s  │  %s %s", Style("agent:", Dim), Style(ui.app.AgentName(), Bold, FgBrightGreen), Style("model:", Dim), Style(ui.app.ModelName(), Bold, FgBrightCyan))
 	if variant := ui.app.VariantName(); variant != "" {
-		fmt.Fprintf(ui.out, "  |  variant: %s", variant)
+		fmt.Fprintf(ui.out, "  │  %s %s", Style("variant:", Dim), Style(variant, Bold, FgYellow))
 	}
-	fmt.Fprintln(ui.out, "  |  /help /models /variants /agents /sessions /new /editor /exit")
+	fmt.Fprintln(ui.out, "\n"+Style("Commands:", FgGray)+" "+Style("/help /models /variants /agents /sessions /new /editor /exit", Dim))
 	if ui.editor != nil {
-		fmt.Fprintf(ui.out, "> %s", editorWithCaret(ui.editor))
+		fmt.Fprintf(ui.out, "%s %s", Style(">", Bold, FgBrightCyan), editorWithCaret(ui.editor))
 	} else {
-		fmt.Fprint(ui.out, "> ")
+		fmt.Fprintf(ui.out, "%s ", Style(">", Bold, FgBrightCyan))
 	}
 }
 

@@ -1,5 +1,6 @@
 package tui
 
+import "strings"
 // Viewport is the small, renderer-independent equivalent of OpenCode's
 // session scrollbox. It keeps the newest output visible until the user moves
 // away from the bottom, then preserves that position while the transcript
@@ -140,11 +141,37 @@ func wrapText(value string, width int) []string {
 	}
 	return result
 }
-
 func transcriptLines(messages []MessageView, width int) []string {
 	lines := []string{}
 	for _, message := range messages {
-		lines = append(lines, wrapText(message.Role+": "+message.Content, width)...)
+		header := message.Role
+		switch message.Role {
+		case "user":
+			header = Style("👤 You", Bold, FgBrightCyan)
+		case "assistant":
+			header = Style("🤖 Assistant", Bold, FgBrightGreen)
+		case "tool":
+			header = Style("🛠️ Tool ("+message.Content+")", Bold, FgBrightYellow)
+		case "system":
+			header = Style("⚙️ System", Bold, FgMagenta)
+		default:
+			header = Style(message.Role, Bold)
+		}
+		lines = append(lines, header)
+		if message.Reasoning != "" {
+			renderedThinking := RenderThinkingBlock(message.Reasoning)
+			for _, part := range strings.Split(renderedThinking, "\n") {
+				if part != "" {
+					lines = append(lines, wrapText(part, width)...)
+				}
+			}
+		}
+		if message.Role != "tool" || message.Content != "" {
+			rendered := RenderMarkdownBlock(message.Content)
+			for _, part := range strings.Split(rendered, "\n") {
+				lines = append(lines, wrapText(part, width)...)
+			}
+		}
 		lines = append(lines, "")
 	}
 	return lines
@@ -152,6 +179,7 @@ func transcriptLines(messages []MessageView, width int) []string {
 
 // MessageView avoids coupling viewport layout to the durable session model.
 type MessageView struct {
-	Role    string
-	Content string
+	Role      string
+	Content   string
+	Reasoning string
 }
