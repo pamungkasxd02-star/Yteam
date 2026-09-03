@@ -1352,7 +1352,7 @@ func (ui *UI) draw() {
 		fmt.Fprintln(ui.out, "    "+Style("•", FgYellow)+" "+Style("Fix a TODO in the codebase", Italic, FgGray))
 		fmt.Fprintln(ui.out, "    "+Style("•", FgYellow)+" "+Style("Fix broken tests and verify output", Italic, FgGray))
 		fmt.Fprintln(ui.out, "")
-		fmt.Fprintln(ui.out, "  "+Style("Keybinds:", Bold, FgBrightYellow))
+		fmt.Fprintln(ui.out, "  "+Style("Shortcuts:", Bold, FgBrightYellow))
 		fmt.Fprintln(ui.out, "    "+Style("•", FgYellow)+" "+Style("/models", Bold, FgBrightCyan)+" — Select AI model or free tier")
 		fmt.Fprintln(ui.out, "    "+Style("•", FgYellow)+" "+Style("/agents", Bold, FgBrightGreen)+" — Switch agent mode (build, plan, explore, general)")
 		fmt.Fprintln(ui.out, "    "+Style("•", FgYellow)+" "+Style("@file", Bold, FgBrightMagenta)+"   — Reference project files or agents")
